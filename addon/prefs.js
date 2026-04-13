@@ -1,2 +1,11 @@
 pref("enable", true);
-pref("input", "This is input");
+pref("shellPath", "/bin/zsh");
+pref("pythonPath", "python3");
+pref("mistralApiKey", "");
+pref("llmApiKey", "");
+pref("llmApiUrl", "https://api.openai.com/v1");
+pref("llmModel", "gpt-5-mini");
+pref("reviewGeneratedHtml", true);
+pref("inlineImages", true);
+pref("sourceLanguage", "auto");
+pref("targetLanguage", "zh-CN");

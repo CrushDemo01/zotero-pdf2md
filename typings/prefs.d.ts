@@ -8,7 +8,16 @@ declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
       "enable": boolean;
-      "input": string;
+      "shellPath": string;
+      "pythonPath": string;
+      "mistralApiKey": string;
+      "llmApiKey": string;
+      "llmApiUrl": string;
+      "llmModel": string;
+      "reviewGeneratedHtml": boolean;
+      "inlineImages": boolean;
+      "sourceLanguage": string;
+      "targetLanguage": string;
     };
   }
 }

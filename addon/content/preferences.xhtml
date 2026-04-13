@@ -12,18 +12,121 @@
   />
   <hbox>
     <html:label
-      for="zotero-prefpane-__addonRef__-input"
-      data-l10n-id="pref-input"
+      for="zotero-prefpane-__addonRef__-source-language"
+      data-l10n-id="pref-source-language"
+    ></html:label>
+    <menulist
+      id="zotero-prefpane-__addonRef__-source-language"
+      preference="sourceLanguage"
+    >
+      <menupopup>
+        <menuitem value="auto" data-l10n-id="pref-language-auto" />
+        <menuitem value="zh-CN" data-l10n-id="pref-language-zh-cn" />
+        <menuitem value="en" data-l10n-id="pref-language-en" />
+        <menuitem value="ja" data-l10n-id="pref-language-ja" />
+        <menuitem value="ko" data-l10n-id="pref-language-ko" />
+        <menuitem value="fr" data-l10n-id="pref-language-fr" />
+        <menuitem value="de" data-l10n-id="pref-language-de" />
+        <menuitem value="es" data-l10n-id="pref-language-es" />
+        <menuitem value="ru" data-l10n-id="pref-language-ru" />
+        <menuitem value="pt-BR" data-l10n-id="pref-language-pt-br" />
+      </menupopup>
+    </menulist>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-target-language"
+      data-l10n-id="pref-target-language"
+    ></html:label>
+    <menulist
+      id="zotero-prefpane-__addonRef__-target-language"
+      preference="targetLanguage"
+    >
+      <menupopup>
+        <menuitem value="auto" data-l10n-id="pref-language-auto" />
+        <menuitem value="zh-CN" data-l10n-id="pref-language-zh-cn" />
+        <menuitem value="en" data-l10n-id="pref-language-en" />
+        <menuitem value="ja" data-l10n-id="pref-language-ja" />
+        <menuitem value="ko" data-l10n-id="pref-language-ko" />
+        <menuitem value="fr" data-l10n-id="pref-language-fr" />
+        <menuitem value="de" data-l10n-id="pref-language-de" />
+        <menuitem value="es" data-l10n-id="pref-language-es" />
+        <menuitem value="ru" data-l10n-id="pref-language-ru" />
+        <menuitem value="pt-BR" data-l10n-id="pref-language-pt-br" />
+      </menupopup>
+    </menulist>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-python-path"
+      data-l10n-id="pref-python-path"
     ></html:label>
     <html:input
       type="text"
-      id="zotero-prefpane-__addonRef__-input"
-      preference="input"
+      id="zotero-prefpane-__addonRef__-python-path"
+      preference="pythonPath"
     ></html:input>
   </hbox>
-  <hbox class="virtualized-table-container" flex="1" height="300px">
-    <html:div id="__addonRef__-table-container" />
+  <vbox>
+    <html:label data-l10n-id="pref-python-path-help"></html:label>
+  </vbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-mistral-key"
+      data-l10n-id="pref-mistral-key"
+    ></html:label>
+    <html:input
+      type="password"
+      id="zotero-prefpane-__addonRef__-mistral-key"
+      preference="mistralApiKey"
+    ></html:input>
   </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-llm-api-key"
+      data-l10n-id="pref-llm-api-key"
+    ></html:label>
+    <html:input
+      type="password"
+      id="zotero-prefpane-__addonRef__-llm-api-key"
+      preference="llmApiKey"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-llm-api-url"
+      data-l10n-id="pref-llm-api-url"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-__addonRef__-llm-api-url"
+      preference="llmApiUrl"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-llm-model"
+      data-l10n-id="pref-llm-model"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-__addonRef__-llm-model"
+      preference="llmModel"
+    ></html:input>
+  </hbox>
+  <vbox>
+    <html:label data-l10n-id="pref-llm-api-help"></html:label>
+  </vbox>
+  <checkbox
+    id="zotero-prefpane-__addonRef__-review-generated-html"
+    preference="reviewGeneratedHtml"
+    data-l10n-id="pref-review-generated-html"
+  />
+  <checkbox
+    id="zotero-prefpane-__addonRef__-inline-images"
+    preference="inlineImages"
+    data-l10n-id="pref-inline-images"
+  />
 </groupbox>
 <vbox>
   <html:label

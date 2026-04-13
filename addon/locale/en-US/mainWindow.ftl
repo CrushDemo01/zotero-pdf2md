@@ -1,11 +1,11 @@
 item-section-example1-head-text =
-    .label = Plugin Template: Item Info
+    .label = zotero-pdf2md：条目信息
 item-section-example1-sidenav-tooltip =
-    .tooltiptext = This is Plugin Template section (item info)
+    .tooltiptext = 这是 zotero-pdf2md 面板（条目信息）
 item-section-example2-head-text =
-    .label = Plugin Template: Reader [{$status}]
+    .label = zotero-pdf2md：阅读器 [{$status}]
 item-section-example2-sidenav-tooltip =
-    .tooltiptext = This is Plugin Template section (reader)
+    .tooltiptext = 这是 zotero-pdf2md 面板（阅读器）
 item-section-example2-button-tooltip =
-    .tooltiptext = Unregister this section
-item-info-row-example-label = Example Row
+    .tooltiptext = 移除此面板
+item-info-row-example-label = 示例行

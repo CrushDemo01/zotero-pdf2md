@@ -142,7 +142,7 @@ export class UIExampleFactory {
     // item menuitem with icon
     ztoolkit.Menu.register("item", {
       tag: "menuitem",
-      id: "zotero-itemmenu-addontemplate-test",
+      id: "zotero-itemmenu-zoteropdf2md-test",
       label: getString("menuitem-label"),
       commandListener: (ev) => addon.hooks.onDialogEvents("dialogExample"),
       icon: menuIcon,
@@ -166,7 +166,7 @@ export class UIExampleFactory {
       },
       "before",
       win.document?.querySelector(
-        "#zotero-itemmenu-addontemplate-test",
+        "#zotero-itemmenu-zoteropdf2md-test",
       ) as XUL.MenuItem,
     );
   }
@@ -354,7 +354,7 @@ export class PromptExampleFactory {
     ztoolkit.Prompt.register([
       {
         name: "Normal Command Test",
-        label: "Plugin Template",
+        label: "zotero-pdf2md",
         callback(prompt) {
           ztoolkit.getGlobal("alert")("Command triggered!");
         },
@@ -567,7 +567,7 @@ export class PromptExampleFactory {
     ztoolkit.Prompt.register([
       {
         name: "Conditional Command Test",
-        label: "Plugin Template",
+        label: "zotero-pdf2md",
         // The when function is executed when Prompt UI is woken up by `Shift + P`, and this command does not display when false is returned.
         when: () => {
           const items = ztoolkit.getGlobal("ZoteroPane").getSelectedItems();

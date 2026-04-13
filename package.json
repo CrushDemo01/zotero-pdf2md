@@ -1,24 +1,24 @@
 {
-  "name": "zotero-plugin-template",
+  "name": "zotero-pdf2md",
   "type": "module",
-  "version": "3.1.0",
-  "description": "Zotero Plugin Template",
+  "version": "0.1.0",
+  "description": "Zotero plugin for PDF to Markdown, translation, and HTML preview",
   "config": {
-    "addonName": "Zotero Plugin Template",
-    "addonID": "addontemplate@euclpts.com",
-    "addonRef": "addontemplate",
-    "addonInstance": "AddonTemplate",
-    "prefsPrefix": "extensions.zotero.addontemplate"
+    "addonName": "zotero-pdf2md",
+    "addonID": "zotero-pdf2md@yyds.dev",
+    "addonRef": "zoteroPdf2md",
+    "addonInstance": "ZoteroPdf2md",
+    "prefsPrefix": "extensions.zotero.zoteroPdf2md"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/windingwind/zotero-plugin-template.git"
+    "url": "git+https://github.com/CrushDemo01/zotero-pdf2md.git"
   },
-  "author": "windingwind",
+  "author": "CrushDemo01",
   "bugs": {
-    "url": "https://github.com/windingwind/zotero-plugin-template/issues"
+    "url": "https://github.com/CrushDemo01/zotero-pdf2md/issues"
   },
-  "homepage": "https://github.com/windingwind/zotero-plugin-template#readme",
+  "homepage": "https://github.com/CrushDemo01/zotero-pdf2md#readme",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",
@@ -30,10 +30,14 @@
     "update-deps": "npm update --save"
   },
   "dependencies": {
+    "katex": "^0.16.45",
+    "markdown-it": "^14.1.1",
+    "markdown-it-texmath": "^1.0.0",
     "zotero-plugin-toolkit": "^5.1.0-beta.13"
   },
   "devDependencies": {
     "@types/chai": "^5.2.3",
+    "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.10.0",
     "@zotero-plugin/eslint-config": "^0.6.7",

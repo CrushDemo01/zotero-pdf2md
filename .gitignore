@@ -14,3 +14,16 @@ tsconfig.tsbuildinfo
 .scaffold
 build
 logs
+
+# Local preview and release artifacts
+*.preview.html
+*.xpi
+
+# Local helper outputs
+prepare.log
+final_translation.log
+*.review.log
+
+# Python cache
+__pycache__/
+*.pyc
