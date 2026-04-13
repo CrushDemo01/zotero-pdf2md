@@ -22,6 +22,12 @@
 - 自动创建 Zotero note，用于结果摘要和 HTML 预览
 - 使用原生 MathML 渲染公式，减少 Zotero 中的公式错乱
 
+## 当前限制
+
+- 目前 HTML 预览中的公式，在 Zotero note 视图里仍然不能保证稳定、正确渲染。
+- 尤其是部分 MathML / TeX 表达式，在 Zotero 内置的 HTML note 渲染器中仍可能显示异常。
+- 如果你更在意公式准确性，建议优先在浏览器中直接打开生成的 `*.preview.html`，或以 Markdown 原文作为最终依据。
+
 ## 运行要求
 
 - Zotero 7

@@ -22,6 +22,12 @@ It uses:
 - Create Zotero child notes for result summaries and HTML previews
 - Preserve OCR images and render formulas with native MathML for better Zotero compatibility
 
+## Current limitations
+
+- HTML preview formulas are still not fully reliable inside Zotero note rendering.
+- In particular, some MathML/TeX expressions may not render correctly in Zotero's built-in HTML note view.
+- If formula fidelity matters, prefer opening the generated `*.preview.html` file externally in a browser, or use the Markdown output as the source of truth.
+
 ## Requirements
 
 - Zotero 7
