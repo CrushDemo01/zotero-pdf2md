@@ -31,7 +31,15 @@ SYSTEM_PROMPT = (
     "structure. Keep model names, method names, and citation keys in "
     "their original form. Translate section headings to Chinese when "
     "appropriate. Do not add explanations, YAML, code fences around the "
-    "whole answer, or placeholder text. If the input contains markers like "
+    "whole answer, or placeholder text. "
+    "IMPORTANT: All mathematical expressions MUST be wrapped in LaTeX "
+    "delimiters. Use single dollar signs ($...$) for inline math and "
+    "double dollar signs ($$...$$) for display/block math equations. "
+    "Never leave LaTeX commands like \\mathbf, \\begin, \\frac, "
+    "\\operatorname, \\left, \\right etc. unwrapped without dollar "
+    "sign delimiters. Every formula, variable, and equation must have "
+    "proper delimiters. "
+    "If the input contains markers like "
     "[[[PDF2MD_IMAGE_1]]], keep every marker exactly unchanged unless the OCR "
     "placement is clearly wrong. You must check image placement against the "
     "rendered PDF pages and, when needed, move the image marker so the image "
@@ -49,6 +57,10 @@ def _build_endpoint(api_base: str, default_path: str) -> str:
     base = api_base.rstrip("/")
     if base.endswith("/chat/completions") or base.endswith("/responses"):
         return base
+    from urllib.parse import urlparse
+    path = urlparse(base).path
+    if "/v1" not in path:
+        base = f"{base}/v1"
     return f"{base}{default_path}"
 
 
@@ -84,13 +96,23 @@ def call_chat_completions_api(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request) as response:
-            body = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(request, timeout=120) as response:
+            raw_body = response.read().decode("utf-8")
+            try:
+                body = json.loads(raw_body)
+            except json.JSONDecodeError:
+                raise RuntimeError(
+                    f"API returned invalid JSON: {raw_body[:500]}..."
+                )
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(
-            f"Chat Completions API request failed: {exc.code} {detail}"
+            f"API request failed with HTTP {exc.code}: {detail[:800]}"
         ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Failed to connect to API ({url}): {exc.reason}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Unexpected error during API call: {str(exc)}") from exc
 
     choices = body.get("choices") or []
     message = (choices[0] or {}).get("message", {}) if choices else {}
@@ -118,10 +140,19 @@ def build_chunk_prompt(
     asset_summary: str,
     pages_dir: str,
     ocr_json_path: str,
+    prev_context: str = "",
 ) -> str:
+    context_block = ""
+    if prev_context:
+        context_block = (
+            "For terminology consistency, here is the ending of the previous "
+            "chunk's translation:\n"
+            f"---\n{prev_context}\n---\n\n"
+        )
     return (
         f"Paper title: {title}\n\n"
         f"Current chunk title: {chunk_title}\n\n"
+        f"{context_block}"
         f"Rendered PDF pages directory: {pages_dir}\n"
         f"OCR response JSON: {ocr_json_path}\n\n"
         "Asset index summary for reference:\n"
@@ -257,6 +288,50 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+import time
+
+
+def call_api_with_retry(
+    *,
+    api_key: str,
+    model: str,
+    api_base: str,
+    prompt: str,
+    max_retries: int = 3,
+    initial_delay: float = 2.0,
+) -> str:
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return call_chat_completions_api(
+                api_key=api_key,
+                model=model,
+                api_base=api_base,
+                prompt=prompt,
+            )
+        except RuntimeError as exc:
+            last_error = exc
+            error_msg = str(exc)
+            # Only retry on likely transient errors: 429, 5xx, or network issues
+            is_transient = (
+                "429" in error_msg or
+                "500" in error_msg or
+                "502" in error_msg or
+                "503" in error_msg or
+                "504" in error_msg or
+                "Failed to connect" in error_msg or
+                "Unexpected error during API call" in error_msg
+            )
+            if not is_transient or attempt == max_retries - 1:
+                break
+            
+            delay = initial_delay * (2 ** attempt)
+            print(f"API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}. Retrying in {delay:.1f}s...")
+            time.sleep(delay)
+    
+    raise last_error or RuntimeError("API call failed after retries")
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -329,6 +404,15 @@ def main() -> int:
     if start_idx == 1 and out_md.exists():
         out_md.unlink()
 
+    progress_path = outdir / "translation_progress.json"
+    progress = {
+        "current_chunk": start_idx - 1,
+        "total_chunks": len(chunks),
+        "status": "translating",
+    }
+    progress_path.write_text(json.dumps(progress), encoding="utf-8")
+
+    prev_context = ""
     for idx in range(start_idx, end_idx + 1):
         chunk = chunks[idx - 1]
         protected_body, image_map = protect_image_syntax(chunk.body)
@@ -339,8 +423,9 @@ def main() -> int:
             asset_summary=asset_summary,
             pages_dir=str(pages_dir),
             ocr_json_path=str(ocr_json),
+            prev_context=prev_context,
         )
-        translated = call_chat_completions_api(
+        translated = call_api_with_retry(
             api_key=api_key,
             model=args.model,
             api_base=args.api_base,
@@ -355,9 +440,20 @@ def main() -> int:
             append=bool(idx > 1 or start_idx > 1),
         )
 
+        prev_context = translated.strip()[-500:]
+        progress["current_chunk"] = idx
+        progress_path.write_text(json.dumps(progress), encoding="utf-8")
+
+    progress["status"] = "done"
+    progress_path.write_text(json.dumps(progress), encoding="utf-8")
+
     print(out_md)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)

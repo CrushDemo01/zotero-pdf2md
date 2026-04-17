@@ -81,6 +81,18 @@
       preference="mistralApiKey"
     ></html:input>
   </hbox>
+  <vbox>
+    <hbox align="center">
+      <html:label data-l10n-id="pref-llm-profile" style="font-weight:bold;margin-right:6px;"></html:label>
+      <menulist id="zotero-prefpane-__addonRef__-llm-profile-select" style="min-width:160px;">
+        <menupopup id="zotero-prefpane-__addonRef__-llm-profile-popup">
+          <menuitem value="" data-l10n-id="pref-llm-profile-none" />
+        </menupopup>
+      </menulist>
+      <html:button id="zotero-prefpane-__addonRef__-llm-profile-save" data-l10n-id="pref-llm-profile-save" style="margin-left:6px;"></html:button>
+      <html:button id="zotero-prefpane-__addonRef__-llm-profile-delete" data-l10n-id="pref-llm-profile-delete" style="margin-left:4px;"></html:button>
+    </hbox>
+  </vbox>
   <hbox>
     <html:label
       for="zotero-prefpane-__addonRef__-llm-api-key"

@@ -128,40 +128,88 @@ def replace_table_placeholders(markdown: str, table_refs: dict[str, str], inline
     return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", repl, markdown)
 
 
+import time
+
+
+def call_api_with_retry(
+    func,
+    *args,
+    max_retries: int = 3,
+    initial_delay: float = 2.0,
+    **kwargs,
+):
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError, TimeoutError) as exc:
+            last_error = exc
+            error_msg = str(exc)
+            
+            # Check if error is transient
+            is_transient = True
+            if isinstance(exc, urllib.error.HTTPError):
+                # Don't retry on 400, 401, 403, 404
+                if exc.code in [400, 401, 403, 404]:
+                    is_transient = False
+            
+            if not is_transient or attempt == max_retries - 1:
+                break
+            
+            delay = initial_delay * (2 ** attempt)
+            print(f"Mistral API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}. Retrying in {delay:.1f}s...")
+            time.sleep(delay)
+    
+    raise last_error or RuntimeError("Mistral API call failed after retries")
+
+
 def upload_file_via_rest(api_key: str, pdf_path: Path) -> str:
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-        upload_json = Path(tmp.name)
+    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+    
+    def build_multipart():
+        parts = []
+        parts.append(f"--{boundary}".encode())
+        parts.append(b'Content-Disposition: form-data; name="purpose"')
+        parts.append(b"")
+        parts.append(b"ocr")
+        
+        parts.append(f"--{boundary}".encode())
+        parts.append(b'Content-Disposition: form-data; name="visibility"')
+        parts.append(b"")
+        parts.append(b"user")
+        
+        parts.append(f"--{boundary}".encode())
+        parts.append(f'Content-Disposition: form-data; name="file"; filename="{pdf_path.name}"'.encode())
+        parts.append(b"Content-Type: application/pdf")
+        parts.append(b"")
+        parts.append(pdf_path.read_bytes())
+        
+        parts.append(f"--{boundary}--".encode())
+        parts.append(b"")
+        return b"\r\n".join(parts)
 
+    data = build_multipart()
+    request = urllib.request.Request(
+        FILES_API_URL,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(data)),
+        },
+        method="POST",
+    )
+    
     try:
-        with upload_json.open("wb") as stdout:
-            subprocess.run(
-                [
-                    "curl",
-                    "--silent",
-                    "--show-error",
-                    "-X",
-                    "POST",
-                    FILES_API_URL,
-                    "-H",
-                    f"Authorization: Bearer {api_key}",
-                    "-F",
-                    f"file=@{pdf_path}",
-                    "-F",
-                    "purpose=ocr",
-                    "-F",
-                    "visibility=user",
-                ],
-                check=True,
-                stdout=stdout,
-            )
-        data = json.loads(upload_json.read_text(encoding="utf-8"))
-    finally:
-        upload_json.unlink(missing_ok=True)
-
-    file_id = data.get("id")
-    if not file_id:
-        raise RuntimeError(f"Upload succeeded but response has no file id: {data}")
-    return file_id
+        with urllib.request.urlopen(request, timeout=180) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            file_id = res_data.get("id")
+            if not file_id:
+                raise RuntimeError(f"Upload response missing file id: {res_data}")
+            return file_id
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Mistral file upload failed ({exc.code}): {detail}") from exc
 
 
 def call_ocr_via_rest(
@@ -199,11 +247,11 @@ def call_ocr_via_rest(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=300) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Mistral OCR request failed: {exc.code} {detail}") from exc
+        raise RuntimeError(f"Mistral OCR request failed ({exc.code}): {detail}") from exc
 
 
 def format_page_metadata(page: dict) -> list[str]:
@@ -371,8 +419,9 @@ def convert_pdf_to_markdown(
     final_output.parent.mkdir(parents=True, exist_ok=True)
 
     api_key = get_api_key()
-    file_id = upload_file_via_rest(api_key, pdf_path)
-    ocr_response = call_ocr_via_rest(
+    file_id = call_api_with_retry(upload_file_via_rest, api_key, pdf_path)
+    ocr_response = call_api_with_retry(
+        call_ocr_via_rest,
         api_key=api_key,
         file_id=file_id,
         model=model,
@@ -484,4 +533,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        import sys
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)

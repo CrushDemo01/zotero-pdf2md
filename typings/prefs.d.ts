@@ -14,6 +14,8 @@ declare namespace _ZoteroTypes {
       "llmApiKey": string;
       "llmApiUrl": string;
       "llmModel": string;
+      "llmProfiles": string;
+      "llmActiveProfile": string;
       "reviewGeneratedHtml": boolean;
       "inlineImages": boolean;
       "sourceLanguage": string;

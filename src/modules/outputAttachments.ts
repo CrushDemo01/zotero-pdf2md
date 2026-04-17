@@ -63,6 +63,11 @@ function safeGetAttachmentPath(item: any): string | undefined {
   }
 }
 
+function shouldLinkOutputFile(filePath: string) {
+  const lower = normalizePath(filePath).toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".html");
+}
+
 export async function linkOutputFilesAsAttachments(
   sourceItem: AttachmentSourceItem,
   files: Array<{ path: string; title?: string }>,
@@ -106,12 +111,18 @@ export async function linkOutputFilesAsAttachments(
       filePath;
 
     const attachmentsApi = (Zotero as any).Attachments;
-    const createFn =
-      typeof attachmentsApi?.importFromFile === "function"
+    const preferLink = shouldLinkOutputFile(filePath);
+    const createFn = preferLink
+      ? (typeof attachmentsApi?.linkFromFile === "function"
+        ? attachmentsApi.linkFromFile.bind(attachmentsApi)
+        : typeof attachmentsApi?.importFromFile === "function"
+          ? attachmentsApi.importFromFile.bind(attachmentsApi)
+          : undefined)
+      : (typeof attachmentsApi?.importFromFile === "function"
         ? attachmentsApi.importFromFile.bind(attachmentsApi)
         : typeof attachmentsApi?.linkFromFile === "function"
           ? attachmentsApi.linkFromFile.bind(attachmentsApi)
-          : undefined;
+          : undefined);
 
     if (!createFn) {
       throw new Error("Zotero.Attachments.linkFromFile/importFromFile is not available.");

@@ -1,4 +1,150 @@
 import { config } from "../../package.json";
+import { getPref, setPref } from "../utils/prefs";
+
+interface LlmProfile {
+  name: string;
+  apiKey: string;
+  apiUrl: string;
+  model: string;
+}
+
+function getDoc() {
+  return addon.data.prefs!.window.document;
+}
+
+function el(id: string) {
+  return getDoc()?.getElementById(id) ?? null;
+}
+
+function readProfiles(): LlmProfile[] {
+  const raw = getPref("llmProfiles");
+  if (!raw || typeof raw !== "string") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveProfiles(profiles: LlmProfile[]) {
+  setPref("llmProfiles", JSON.stringify(profiles));
+}
+
+function rebuildProfileMenu() {
+  const popup = el(
+    `zotero-prefpane-${config.addonRef}-llm-profile-popup`,
+  );
+  if (!popup) {
+    return;
+  }
+
+  while (popup.firstChild) {
+    popup.removeChild(popup.firstChild);
+  }
+
+  const noneItem = getDoc().createXULElement("menuitem");
+  noneItem.setAttribute("value", "");
+  noneItem.setAttribute("label", "\uFF08\u81EA\u5B9A\u4E49\uFF09");
+  popup.appendChild(noneItem);
+
+  for (const profile of readProfiles()) {
+    const item = getDoc().createXULElement("menuitem");
+    item.setAttribute("value", profile.name);
+    item.setAttribute("label", profile.name);
+    popup.appendChild(item);
+  }
+
+  const menulist = el(
+    `zotero-prefpane-${config.addonRef}-llm-profile-select`,
+  ) as any;
+  if (menulist) {
+    const active = getPref("llmActiveProfile") || "";
+    menulist.value = active;
+  }
+}
+
+function applyProfile(profile: LlmProfile | undefined) {
+  const keyInput = el(`zotero-prefpane-${config.addonRef}-llm-api-key`) as HTMLInputElement | null;
+  const urlInput = el(`zotero-prefpane-${config.addonRef}-llm-api-url`) as HTMLInputElement | null;
+  const modelInput = el(`zotero-prefpane-${config.addonRef}-llm-model`) as HTMLInputElement | null;
+
+  if (profile) {
+    setPref("llmApiKey", profile.apiKey);
+    setPref("llmApiUrl", profile.apiUrl);
+    setPref("llmModel", profile.model);
+    setPref("llmActiveProfile", profile.name);
+    if (keyInput) keyInput.value = profile.apiKey;
+    if (urlInput) urlInput.value = profile.apiUrl;
+    if (modelInput) modelInput.value = profile.model;
+  } else {
+    setPref("llmActiveProfile", "");
+  }
+}
+
+function onProfileSelect() {
+  const menulist = el(
+    `zotero-prefpane-${config.addonRef}-llm-profile-select`,
+  ) as any;
+  if (!menulist) {
+    return;
+  }
+  const selected = menulist.value;
+  if (!selected) {
+    applyProfile(undefined);
+    return;
+  }
+  const profiles = readProfiles();
+  const profile = profiles.find((p) => p.name === selected);
+  if (profile) {
+    applyProfile(profile);
+  }
+}
+
+function onProfileSave() {
+  const win = addon.data.prefs!.window;
+  const existing = getPref("llmActiveProfile") || "";
+  const name = (win as any).prompt?.("输入配置方案名称：", existing || "") as string | null;
+  if (!name?.trim()) {
+    return;
+  }
+  const trimmed = name.trim();
+
+  const apiKey = (getPref("llmApiKey") as string) || "";
+  const apiUrl = (getPref("llmApiUrl") as string) || "";
+  const model = (getPref("llmModel") as string) || "";
+
+  const profiles = readProfiles();
+  const idx = profiles.findIndex((p) => p.name === trimmed);
+  const entry: LlmProfile = { name: trimmed, apiKey, apiUrl, model };
+  if (idx >= 0) {
+    profiles[idx] = entry;
+  } else {
+    profiles.push(entry);
+  }
+  saveProfiles(profiles);
+  setPref("llmActiveProfile", trimmed);
+  rebuildProfileMenu();
+}
+
+function onProfileDelete() {
+  const menulist = el(
+    `zotero-prefpane-${config.addonRef}-llm-profile-select`,
+  ) as any;
+  if (!menulist) {
+    return;
+  }
+  const selected = menulist.value;
+  if (!selected) {
+    return;
+  }
+  const profiles = readProfiles().filter((p) => p.name !== selected);
+  saveProfiles(profiles);
+  setPref("llmActiveProfile", "");
+  rebuildProfileMenu();
+}
 
 export async function registerPrefsScripts(_window: Window) {
   if (!addon.data.prefs) {
@@ -11,6 +157,7 @@ export async function registerPrefsScripts(_window: Window) {
     addon.data.prefs.window = _window;
   }
   bindPrefEvents();
+  rebuildProfileMenu();
 }
 
 function bindPrefEvents() {
@@ -43,4 +190,13 @@ function bindPrefEvents() {
         ztoolkit.log("偏好设置已更新", suffix, e);
       });
   });
+
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-select`)
+    ?.addEventListener("command", () => onProfileSelect());
+
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-save`)
+    ?.addEventListener("click", () => onProfileSave());
+
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-delete`)
+    ?.addEventListener("click", () => onProfileDelete());
 }

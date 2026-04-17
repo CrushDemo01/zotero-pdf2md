@@ -26,6 +26,8 @@ const NOTE_MARKER = "zotero-pdf2md-result-note";
 const PREVIEW_NOTE_MARKER = "zotero-pdf2md-markdown-preview";
 const PREVIEW_RENDERER_VERSION = "mdit-v4";
 const discoveredFileCache = new Map<string, string | undefined>();
+const LATEX_COMMAND_RE =
+  /\\(?:begin|end|operatorname|mathbf|mathbb|mathcal|mathrm|left|right|frac|sum|prod|tag|cdot|odot|hat|quad|dots|leq|geq|sigma|log|exp|text|in|forall|limits|tau|top|mid|Softmax|Dec|Fuse|triangleq)\b/;
 
 function escapeHtml(value: string) {
   return value
@@ -525,6 +527,18 @@ function createMarkdownRenderer() {
     },
   });
 
+  // Customize texmath rendering to output Markdown-style formulas
+  // that Zotero 7 can recognize as math nodes or plain MD text.
+  md.renderer.rules.math_inline = (tokens, idx) => {
+    const content = tokens[idx].content;
+    return `<span class="math-node" data-math-src="${escapeHtml(content)}" data-math-inline="true">$${escapeHtml(content)}$</span>`;
+  };
+
+  md.renderer.rules.math_block = (tokens, idx) => {
+    const content = tokens[idx].content;
+    return `<div class="math-node math-block" data-math-src="${escapeHtml(content)}" data-math-display="true">$$\n${escapeHtml(content)}\n$$</div>`;
+  };
+
   const defaultImageRule =
     md.renderer.rules.image ||
     ((tokens, idx, options, _env, self) =>
@@ -572,8 +586,206 @@ function createMarkdownRenderer() {
 
 const markdownRenderer = createMarkdownRenderer();
 
+function collapseSpacedAsciiTokens(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.includes(" ")) {
+    return value;
+  }
+  if (!/^[A-Za-z0-9@._+\- ]+$/.test(trimmed)) {
+    return value;
+  }
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) {
+    return value;
+  }
+  const mostlySingleChar = tokens.every((token) => token.length <= 2);
+  if (!mostlySingleChar) {
+    return value;
+  }
+  return tokens.join("");
+}
+
+function normalizeLatexExpression(input: string) {
+  let normalized = input;
+
+  normalized = normalized.replace(
+    /\\(big|Big|bigg|Bigg)\s*\{\s*([()[\]{}|])\s*\}/g,
+    "\\$1$2",
+  );
+  normalized = normalized.replace(
+    /\\(left|right)\s*\{\s*([()[\]{}|])\s*\}/g,
+    "\\$1$2",
+  );
+
+  normalized = normalized.replace(
+    /\\(operatorname|mathrm|mathbf|mathbb|mathcal)\s*\{([^{}]+)\}/g,
+    (full, command: string, content: string) => {
+      const collapsed = collapseSpacedAsciiTokens(content);
+      return `\\${command}{${collapsed}}`;
+    },
+  );
+
+  normalized = normalized.replace(
+    /\\([A-Za-z]+)\s+\{/g,
+    (_full, command: string) => `\\${command}{`,
+  );
+
+  return normalized;
+}
+
+function normalizeMarkdownMath(markdown: string) {
+  let normalized = markdown.replace(
+    /\$\$([\s\S]*?)\$\$/g,
+    (full, expression: string) => `$$\n${normalizeLatexExpression(expression.trim())}\n$$`,
+  );
+
+  normalized = normalized.replace(
+    /(?<!\$)\$([^$\n]+?)\$(?!\$)/g,
+    (_full, expression: string) => `$${normalizeLatexExpression(expression)}$`,
+  );
+
+  return normalized;
+}
+
+function countMatches(value: string, pattern: RegExp) {
+  return (value.match(pattern) || []).length;
+}
+
+function isMarkdownStructuralLine(trimmed: string) {
+  return /^(?:#{1,6}\s|>\s|[-*_]{3,}\s*$|!\[|`{3,}|~{3,}|<!--|\||\d+\.\s|[-+*]\s)/.test(
+    trimmed,
+  );
+}
+
+const CJK_RE = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u3400-\u4dbf]/;
+
+function hasCjkOutsideLatex(line: string) {
+  const stripped = line.replace(/\\[a-zA-Z]+\{[^}]*\}/g, "");
+  return CJK_RE.test(stripped);
+}
+
+function wrapInlineLatexSpans(line: string) {
+  if (/\$/.test(line)) {
+    return line;
+  }
+  if (!LATEX_COMMAND_RE.test(line)) {
+    return line;
+  }
+  if (!hasCjkOutsideLatex(line)) {
+    return line;
+  }
+
+  const segments = line.split(/([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u3400-\u4dbf\uff0c\u3001\u3002\uff1b\uff1a\uff01\uff1f\u300a\u300b\u201c\u201d]+)/);
+  return segments
+    .map((seg) => {
+      if (CJK_RE.test(seg)) {
+        return seg;
+      }
+      const trimmed = seg.trim();
+      if (!trimmed) {
+        return seg;
+      }
+      if (!LATEX_COMMAND_RE.test(trimmed)) {
+        return seg;
+      }
+      const lead = seg.match(/^\s*/)?.[0] || "";
+      const trail = seg.match(/\s*$/)?.[0] || "";
+      return `${lead}$${trimmed}$${trail}`;
+    })
+    .join("");
+}
+
+function isLikelyAsciiEquationLine(trimmed: string) {
+  if (!/[=+\-*/^_()[\]{}]/.test(trimmed)) {
+    return false;
+  }
+  if (/[\u4e00-\u9fff]/.test(trimmed)) {
+    return false;
+  }
+  if (/[.;:?!]\s*$/.test(trimmed)) {
+    return false;
+  }
+
+  const operatorCount = countMatches(trimmed, /[=+\-*/^_]/g);
+  const bracketCount = countMatches(trimmed, /[()[\]{}]/g);
+  const commaCount = countMatches(trimmed, /[,;]/g);
+  return operatorCount + bracketCount + commaCount >= 5;
+}
+
+function isLikelyStandaloneMathLine(trimmed: string) {
+  if (!trimmed || isMarkdownStructuralLine(trimmed)) {
+    return false;
+  }
+  if (trimmed.includes("$$")) {
+    return false;
+  }
+  if (/^\$.*\$$/.test(trimmed)) {
+    return false;
+  }
+  // Include explicit LaTeX environments so they are grouped in mathBuffer
+  if (trimmed.startsWith("\\begin{") || trimmed.startsWith("\\end{")) {
+    return true;
+  }
+  if (hasCjkOutsideLatex(trimmed)) {
+    return false;
+  }
+  if (LATEX_COMMAND_RE.test(trimmed)) {
+    return true;
+  }
+  return isLikelyAsciiEquationLine(trimmed);
+}
+
+function wrapStandaloneMathBlocks(markdown: string) {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const output: string[] = [];
+  let inFence = false;
+  let mathBuffer: string[] = [];
+
+  const flushMathBuffer = () => {
+    if (!mathBuffer.length) {
+      return;
+    }
+    const firstLine = mathBuffer[0].trim();
+    if (firstLine.startsWith("\\begin{")) {
+      // It's already an explicit environment, no need to wrap in $$
+      output.push(...mathBuffer);
+    } else {
+      output.push("$$", ...mathBuffer, "$$");
+    }
+    mathBuffer = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(```|~~~)/.test(trimmed)) {
+      flushMathBuffer();
+      inFence = !inFence;
+      output.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      output.push(line);
+      continue;
+    }
+
+    if (isLikelyStandaloneMathLine(trimmed)) {
+      mathBuffer.push(trimmed);
+      continue;
+    }
+
+    flushMathBuffer();
+    output.push(wrapInlineLatexSpans(line));
+  }
+
+  flushMathBuffer();
+  return output.join("\n");
+}
+
 async function renderMarkdownToHtml(markdownPath: string, markdown: string) {
-  const preparedMarkdown = await inlineLocalImages(markdownPath, markdown);
+  const preparedMarkdown = wrapStandaloneMathBlocks(
+    normalizeMarkdownMath(await inlineLocalImages(markdownPath, markdown)),
+  );
   return markdownRenderer.render(preparedMarkdown, { markdownPath });
 }
 
@@ -607,6 +819,8 @@ function wrapPreviewHtmlDocument(title: string, bodyHtml: string) {
     blockquote { border-left: 4px solid #888; margin: 1em 0; padding: 0.1em 1em; color: #ddd; }
     a { color: #9ecbff; }
     hr { border: none; border-top: 1px solid #555; margin: 1.5em 0; }
+    .math-node { display: inline-block; }
+    .math-block { display: block; width: 100%; text-align: center; margin: 1em 0; }
     .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.4em 0; }
   </style>
 </head>
@@ -636,6 +850,12 @@ export interface MarkdownPreviewNoteMetadata {
   markdownPath: string;
   noteKey?: string;
   existingNoteID?: number;
+  validation?: {
+    status: "pass" | "warn" | "fail";
+    summary?: string;
+    issues?: string[];
+    reportPath?: string;
+  };
 }
 
 async function loadExcerptMap(
@@ -733,6 +953,25 @@ export async function upsertMarkdownPreviewNote(
       slugifyKey(metadata.markdownPath),
     ].join(":");
   const contentHtml = await renderMarkdownToHtml(metadata.markdownPath, markdown);
+  const validationHtml =
+    metadata.validation && metadata.validation.status !== "pass"
+      ? [
+          `<aside class="zotero-pdf2md-validation zotero-pdf2md-validation-${escapeHtml(metadata.validation.status)}">`,
+          `<strong>结构校验提示：</strong>${escapeHtml(metadata.validation.summary || "检测到可能影响 Zotero Note 公式显示的问题。")}`,
+          ...(metadata.validation.issues?.length
+            ? [
+                `<ul>${metadata.validation.issues
+                  .slice(0, 6)
+                  .map((issue) => `<li>${escapeHtml(issue)}</li>`)
+                  .join("")}</ul>`,
+              ]
+            : []),
+          metadata.validation.reportPath
+            ? `<p>${buildPathLink(metadata.validation.reportPath, "打开校验报告")}</p>`
+            : "",
+          `</aside>`,
+        ].join("")
+      : "";
   const html = [
     `<!-- ${PREVIEW_NOTE_MARKER} key="${escapeHtml(noteKey)}" -->`,
     `<section class="zotero-pdf2md-preview-note">`,
@@ -742,10 +981,14 @@ export async function upsertMarkdownPreviewNote(
       .zotero-pdf2md-preview-note th, .zotero-pdf2md-preview-note td { border: 1px solid #999; padding: 0.35em 0.5em; vertical-align: top; }
       .zotero-pdf2md-preview-note pre { white-space: pre-wrap; overflow-wrap: anywhere; }
       .zotero-pdf2md-preview-note .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }
+      .zotero-pdf2md-preview-note .zotero-pdf2md-validation { border: 1px solid #d0a000; background: #fff7d6; color: #333; padding: 0.75em 0.9em; margin: 1em 0; border-radius: 6px; }
+      .zotero-pdf2md-preview-note .zotero-pdf2md-validation-fail { border-color: #c44; background: #ffe3e3; }
+      .zotero-pdf2md-preview-note .zotero-pdf2md-validation ul { margin: 0.6em 0 0 1.2em; }
     </style>`,
     `<h1>${escapeHtml(metadata.title)}</h1>`,
     `<p><em>渲染器版本：${PREVIEW_RENDERER_VERSION}</em></p>`,
     `<p>${buildPathLink(metadata.markdownPath, "打开对应 Markdown 文件")}</p>`,
+    validationHtml,
     contentHtml || "<p><em>内容为空。</em></p>",
     `</section>`,
   ].join("");

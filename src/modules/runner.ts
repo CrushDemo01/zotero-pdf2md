@@ -5,6 +5,7 @@ const BUNDLED_SCRIPT_FILES = [
   "extract_pdf_assets.py",
   "mistral_ocr_to_markdown.py",
   "prepare_translation_inputs.py",
+  "validate_note_structure.py",
   "review_markdown_html.py",
   "translate_markdown_chunks.py",
   "workflow_common.py",
@@ -166,6 +167,27 @@ function buildPrepareCommand(
   };
 }
 
+export interface TranslationProgress {
+  current_chunk: number;
+  total_chunks: number;
+  status: string;
+}
+
+export async function readTranslationProgress(
+  outDir: string,
+): Promise<TranslationProgress | undefined> {
+  const progressPath = PathUtils.join(outDir, "translation_progress.json");
+  const text = await readTextFile(progressPath);
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as TranslationProgress;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildFinalTranslationCommand(
   pdfPath: string,
   outDir: string,
@@ -173,6 +195,7 @@ function buildFinalTranslationCommand(
   sourceLanguage: string,
   targetLanguage: string,
   skipPrepare: boolean,
+  startChunk?: number,
 ) {
   const shellPath = getPref("shellPath") || "/bin/zsh";
   const pythonPath = getPref("pythonPath") || "python3";
@@ -206,6 +229,9 @@ function buildFinalTranslationCommand(
   }
   if (skipPrepare) {
     parts[4] += " --skip-prepare";
+  }
+  if (startChunk && startChunk > 1) {
+    parts[4] += ` --start-chunk ${startChunk}`;
   }
   return {
     executable: shellPath,
@@ -328,6 +354,13 @@ export async function buildFinalTranslatedMarkdown(
   await ensureOutputDir(outDir);
   const scriptsDir = await ensureBundledScriptsDir();
   const skipPrepare = hasPreparedArtifacts(outDir);
+
+  let startChunk: number | undefined;
+  const progress = await readTranslationProgress(outDir);
+  if (progress && progress.status !== "done" && progress.current_chunk > 0) {
+    startChunk = progress.current_chunk + 1;
+  }
+
   const command = buildFinalTranslationCommand(
     pdfPath,
     outDir,
@@ -335,6 +368,7 @@ export async function buildFinalTranslatedMarkdown(
     sourceLanguage,
     targetLanguage,
     skipPrepare,
+    startChunk,
   );
   await runProcess(command.executable, command.args, command.logPath);
   return {
@@ -343,6 +377,8 @@ export async function buildFinalTranslatedMarkdown(
     sourceLanguage,
     targetLanguage,
     skippedPrepare: skipPrepare,
+    resumed: !!startChunk,
+    startChunk,
     sourceMarkdownPath: PathUtils.join(outDir, "mistral.md"),
     assetIndexPath: PathUtils.join(outDir, "asset_index.md"),
   };
@@ -370,5 +406,85 @@ export async function reviewMarkdownWithHtml(
     logPath: command.logPath,
     markdownPath,
     htmlPath,
+  };
+}
+
+export interface NoteStructureValidationResult {
+  skipped: boolean;
+  status?: "pass" | "warn" | "fail";
+  summary?: string;
+  issues?: string[];
+  reportPath?: string;
+  logPath?: string;
+  reason?: string;
+}
+
+function buildNoteValidationCommand(
+  markdownPath: string,
+  htmlPath: string,
+  scriptsDir: string,
+  title: string,
+) {
+  const shellPath = getPref("shellPath") || "/bin/zsh";
+  const pythonPath = getPref("pythonPath") || "python3";
+  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiUrl = getStringPref("llmApiUrl") || "https://api.openai.com/v1";
+  const llmModel = getStringPref("llmModel") || "gpt-5-mini";
+  const scriptPath = PathUtils.join(scriptsDir, "validate_note_structure.py");
+  const reportPath = `${stripExtension(htmlPath)}.note_validation.json`;
+  const logPath = `${stripExtension(htmlPath)}.note_validation.log`;
+
+  if (!llmApiKey) {
+    throw new Error("LLM API key is not configured in plugin preferences.");
+  }
+
+  const parts = [
+    `export OPENAI_API_KEY=${shellQuote(llmApiKey)}`,
+    `${shellQuote(pythonPath)} ${shellQuote(scriptPath)} --markdown ${shellQuote(markdownPath)} --html ${shellQuote(htmlPath)} --out-json ${shellQuote(reportPath)} --title ${shellQuote(title)} --api-base ${shellQuote(llmApiUrl)} --model ${shellQuote(llmModel)}`,
+  ];
+
+  return {
+    executable: shellPath,
+    args: ["-lc", `${parts.join("; ")} > ${shellQuote(logPath)} 2>&1`],
+    reportPath,
+    logPath,
+  };
+}
+
+export async function validateMarkdownNoteStructure(
+  markdownPath: string,
+  htmlPath: string,
+  title: string,
+): Promise<NoteStructureValidationResult> {
+  const reviewEnabled = getBooleanPref("reviewGeneratedHtml", true);
+  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  if (!reviewEnabled || !llmApiKey) {
+    return {
+      skipped: true,
+      reason: !reviewEnabled ? "disabled" : "missing-llm-api-key",
+    };
+  }
+
+  const scriptsDir = await ensureBundledScriptsDir();
+  const command = buildNoteValidationCommand(markdownPath, htmlPath, scriptsDir, title);
+  await runProcess(command.executable, command.args, command.logPath);
+
+  const raw = await readTextFile(command.reportPath);
+  if (!raw.trim()) {
+    throw new Error(`Note structure validation report is empty: ${command.reportPath}`);
+  }
+  const report = JSON.parse(raw) as {
+    status?: "pass" | "warn" | "fail";
+    summary?: string;
+    issues?: string[];
+  };
+
+  return {
+    skipped: false,
+    status: report.status || "warn",
+    summary: report.summary || "",
+    issues: Array.isArray(report.issues) ? report.issues : [],
+    reportPath: command.reportPath,
+    logPath: command.logPath,
   };
 }

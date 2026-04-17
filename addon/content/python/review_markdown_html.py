@@ -38,6 +38,10 @@ def _build_endpoint(api_base: str, default_path: str) -> str:
     base = api_base.rstrip("/")
     if base.endswith("/chat/completions") or base.endswith("/responses"):
         return base
+    from urllib.parse import urlparse
+    path = urlparse(base).path
+    if "/v1" not in path:
+        base = f"{base}/v1"
     return f"{base}{default_path}"
 
 
