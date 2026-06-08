@@ -2,31 +2,31 @@
 
 [简体中文](doc/README-zhCN.md)
 
-`zotero-pdf2md` is a Zotero 7 plugin that converts PDF attachments into Markdown packages, translated Markdown, and HTML previews.
+`zotero-pdf2md` is a Zotero 7 plugin that converts PDF attachments into Markdown packages, translated Markdown, and Zotero child notes.
 
 It uses:
 
 - Mistral OCR for PDF-to-Markdown extraction
-- an OpenAI-compatible LLM API for translation and optional review
-- local HTML preview generation with images inlined for reliable viewing inside and outside Zotero
+- an OpenAI-compatible LLM API for translation and optional note review
+- local Markdown-to-HTML rendering for Zotero child notes
 
 ## Features
 
 - Right-click a PDF attachment to run:
+  - `一键 PDF → 译文 Note`
   - `PDF 转 Markdown`
-  - `PDF 转 Markdown 并翻译`
+  - `翻译 Markdown`
 - Right-click a Markdown attachment to run:
-  - `Markdown→HTML（快速）`
-  - `Markdown→HTML（复核增强）`
-- Attach generated `mistral.md`, `target.md`, `asset_index.md`, and `*.preview.html` files under the parent Zotero item
-- Create Zotero child notes for result summaries and HTML previews
+  - `生成译文 Note`
+- Attach generated `mistral.md` and `target.md` under the parent Zotero item
+- Create Zotero child notes from translated Markdown
 - Preserve OCR images and render formulas with native MathML for better Zotero compatibility
 
 ## Current limitations
 
-- HTML preview formulas are still not fully reliable inside Zotero note rendering.
+- Formula rendering is still not fully reliable inside Zotero note rendering.
 - In particular, some MathML/TeX expressions may not render correctly in Zotero's built-in HTML note view.
-- If formula fidelity matters, prefer opening the generated `*.preview.html` file externally in a browser, or use the Markdown output as the source of truth.
+- If formula fidelity matters, use the Markdown output as the source of truth.
 
 ## Requirements
 
@@ -95,8 +95,11 @@ The preference pane exposes:
 - `LLM API 密钥`
 - `LLM Base URL`
 - `模型名称`
+- `翻译分块字符数`
+- `参考文献直接使用 OCR 原文，不调用 LLM 翻译`
 - `生成 HTML 后使用 LLM 复核 Markdown`
 - `将 OCR 内联图片保存为本地文件`
+- LLM profiles save only Base URL and model. API keys remain in the dedicated key preference.
 
 No API keys are stored in the repository. Keep them in Zotero plugin preferences or your local environment only.
 

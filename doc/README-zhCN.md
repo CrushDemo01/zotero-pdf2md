@@ -2,31 +2,31 @@
 
 [English](../README.md)
 
-`zotero-pdf2md` 是一个面向 Zotero 7 的插件，用来把 PDF 附件转换为 Markdown 源包、译文 Markdown，以及可直接预览的 HTML。
+`zotero-pdf2md` 是一个面向 Zotero 7 的插件，用来把 PDF 附件转换为 Markdown 源包、译文 Markdown，以及 Zotero 子笔记。
 
 它的核心流程是：
 
 - 使用 Mistral OCR 把 PDF 提取为结构化 Markdown
-- 使用兼容 OpenAI 的 LLM API 做翻译或复核
-- 本地生成 HTML 预览，并尽量内联图片，提升 Zotero 内外的显示稳定性
+- 使用兼容 OpenAI 的 LLM API 做翻译或笔记复核
+- 本地把 Markdown 渲染为 Zotero 子笔记可用的 HTML
 
 ## 功能
 
 - 右键 PDF 附件可执行：
+  - `一键 PDF → 译文 Note`
   - `PDF 转 Markdown`
-  - `PDF 转 Markdown 并翻译`
+  - `翻译 Markdown`
 - 右键 Markdown 附件可执行：
-  - `Markdown→HTML（快速）`
-  - `Markdown→HTML（复核增强）`
-- 自动把 `mistral.md`、`target.md`、`asset_index.md`、`*.preview.html` 挂到论文条目下
-- 自动创建 Zotero note，用于结果摘要和 HTML 预览
+  - `生成译文 Note`
+- 自动把 `mistral.md`、`target.md` 挂到论文条目下
+- 自动从译文 Markdown 创建 Zotero note
 - 使用原生 MathML 渲染公式，减少 Zotero 中的公式错乱
 
 ## 当前限制
 
-- 目前 HTML 预览中的公式，在 Zotero note 视图里仍然不能保证稳定、正确渲染。
+- 目前 Zotero note 视图中的公式仍然不能保证稳定、正确渲染。
 - 尤其是部分 MathML / TeX 表达式，在 Zotero 内置的 HTML note 渲染器中仍可能显示异常。
-- 如果你更在意公式准确性，建议优先在浏览器中直接打开生成的 `*.preview.html`，或以 Markdown 原文作为最终依据。
+- 如果你更在意公式准确性，建议以 Markdown 原文作为最终依据。
 
 ## 运行要求
 
@@ -101,8 +101,11 @@ npm start
 - `LLM API 密钥`
 - `LLM Base URL`
 - `模型名称`
+- `翻译分块字符数`
+- `参考文献直接使用 OCR 原文，不调用 LLM 翻译`
 - `生成 HTML 后使用 LLM 复核 Markdown`
 - `将 OCR 内联图片保存为本地文件`
+- LLM 配置方案只保存 Base URL 和模型名称；API 密钥仍保存在单独的密钥偏好项里。
 
 不要把 API 密钥提交到仓库。密钥应只保存在 Zotero 插件设置或本地环境中。
 

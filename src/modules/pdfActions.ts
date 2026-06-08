@@ -7,6 +7,7 @@ import {
   validateMarkdownNoteStructure,
 } from "./runner";
 import { getPref } from "../utils/prefs";
+import { getLocaleID } from "../utils/locale";
 import {
   upsertMarkdownPreviewNote,
   writeMarkdownPreviewHtmlFile,
@@ -37,9 +38,10 @@ function isPdfAttachment(item: Zotero.Item): boolean {
 function isMarkdownAttachment(item: Zotero.Item): boolean {
   const contentType = (item.attachmentContentType as string | undefined) || "";
   const readerType = (item.attachmentReaderType as string | undefined) || "";
-  const path = typeof (item as any).getFilePath === "function"
-    ? ((item as any).getFilePath() as string | undefined)
-    : undefined;
+  const path =
+    typeof (item as any).getFilePath === "function"
+      ? ((item as any).getFilePath() as string | undefined)
+      : undefined;
   return (
     item.isAttachment() &&
     (contentType === "text/markdown" ||
@@ -48,7 +50,9 @@ function isMarkdownAttachment(item: Zotero.Item): boolean {
   );
 }
 
-async function getAttachmentFilePath(item: Zotero.Item): Promise<string | undefined> {
+async function getAttachmentFilePath(
+  item: Zotero.Item,
+): Promise<string | undefined> {
   if (typeof (item as any).getFilePathAsync === "function") {
     return await (item as any).getFilePathAsync();
   }
@@ -86,7 +90,9 @@ function findPdfAttachmentForItem(item: Zotero.Item): Zotero.Item | undefined {
   return undefined;
 }
 
-function findMarkdownAttachmentForItem(item: Zotero.Item): Zotero.Item | undefined {
+function findMarkdownAttachmentForItem(
+  item: Zotero.Item,
+): Zotero.Item | undefined {
   if (isMarkdownAttachment(item)) {
     return item;
   }
@@ -111,7 +117,10 @@ function getSelectedPdfTargets() {
         pdfItem,
       };
     })
-    .filter(Boolean) as Array<{ sourceItem: Zotero.Item; pdfItem: Zotero.Item }>;
+    .filter(Boolean) as Array<{
+    sourceItem: Zotero.Item;
+    pdfItem: Zotero.Item;
+  }>;
 }
 
 function getSelectedMarkdownTargets() {
@@ -126,7 +135,22 @@ function getSelectedMarkdownTargets() {
         markdownItem,
       };
     })
-    .filter(Boolean) as Array<{ sourceItem: Zotero.Item; markdownItem: Zotero.Item }>;
+    .filter(Boolean) as Array<{
+    sourceItem: Zotero.Item;
+    markdownItem: Zotero.Item;
+  }>;
+}
+
+function hasSelectedPdfTarget(): boolean {
+  return isPluginEnabled() && getSelectedPdfTargets().length > 0;
+}
+
+function hasSelectedMarkdownTarget(): boolean {
+  return isPluginEnabled() && getSelectedMarkdownTargets().length > 0;
+}
+
+function isPluginEnabled(): boolean {
+  return getPref("enable") !== false;
 }
 
 function getLanguagePrefs() {
@@ -182,7 +206,10 @@ function formatErrorForProgress(error: unknown) {
   const errorLine = lines.find((l) => l.startsWith("ERROR:"));
   // Otherwise take the last line (typically the Python exception message)
   const lastLine = lines[lines.length - 1];
-  const summary = (errorLine || lastLine || "未知错误").replace(/^ERROR:\s*/i, "");
+  const summary = (errorLine || lastLine || "未知错误").replace(
+    /^ERROR:\s*/i,
+    "",
+  );
 
   if (!logPath) {
     return `处理失败：${summary}`;
@@ -194,9 +221,7 @@ function fileExists(filePath: string) {
   try {
     const file = (Components.classes as any)[
       "@mozilla.org/file/local;1"
-    ].createInstance(
-      (Components.interfaces as any).nsIFile,
-    );
+    ].createInstance((Components.interfaces as any).nsIFile);
     file.initWithPath(filePath);
     return file.exists();
   } catch (_error) {
@@ -205,7 +230,10 @@ function fileExists(filePath: string) {
 }
 
 function getParentItemID(item: Zotero.Item) {
-  if (typeof (item as any).parentItemID === "number" && (item as any).parentItemID > 0) {
+  if (
+    typeof (item as any).parentItemID === "number" &&
+    (item as any).parentItemID > 0
+  ) {
     return (item as any).parentItemID as number;
   }
   if (typeof (item as any).id === "number" && (item as any).id > 0) {
@@ -224,7 +252,9 @@ function pickFirstExistingPath(candidates: string[]) {
 }
 
 function itemLooksLikeNote(item: any) {
-  return typeof item?.isNote === "function" ? item.isNote() : item?.itemType === "note";
+  return typeof item?.isNote === "function"
+    ? item.isNote()
+    : item?.itemType === "note";
 }
 
 function itemLooksLikeAttachment(item: any) {
@@ -285,16 +315,16 @@ async function cleanupPdf2mdChildren(sourceItem: Zotero.Item) {
 
     const title = getManagedPdf2mdTitle(item);
     const isManagedAttachment =
-      itemLooksLikeAttachment(item) && title.startsWith("pdf2md-") && !keepTitles.has(title);
+      itemLooksLikeAttachment(item) &&
+      title.startsWith("pdf2md-") &&
+      !keepTitles.has(title);
     const noteText = itemLooksLikeNote(item) ? getNoteText(item) : "";
     const isManagedNote =
       itemLooksLikeNote(item) &&
       !keepTitles.has(title) &&
-      (
-        title.startsWith("pdf2md-") ||
+      (title.startsWith("pdf2md-") ||
         noteText.includes("zotero-pdf2md-result-note") ||
-        noteText.includes("zotero-pdf2md-markdown-preview")
-      );
+        noteText.includes("zotero-pdf2md-markdown-preview"));
 
     if (!isManagedAttachment && !isManagedNote) {
       continue;
@@ -329,9 +359,7 @@ async function buildAttachAndReviewHtmlPreview(
         title,
       );
       const reviewed =
-        reviewMode === "always"
-          ? !reviewResult.skipped
-          : !reviewResult.skipped;
+        reviewMode === "always" ? !reviewResult.skipped : !reviewResult.skipped;
       if (reviewMode === "always" && reviewResult.skipped) {
         throw new Error("未配置 LLM 接口，无法执行复核增强模式。");
       }
@@ -376,7 +404,9 @@ async function findLegacyMarkdownPath(
     return (
       files.find((p) => p.endsWith("_target.md")) ||
       files.find((p) => p.includes("_auto_to_")) ||
-      files.find((p) => !p.endsWith(".mistral.md") && !p.endsWith("asset_index.md"))
+      files.find(
+        (p) => !p.endsWith(".mistral.md") && !p.endsWith("asset_index.md"),
+      )
     );
   } catch (_error) {
     return undefined;
@@ -420,8 +450,20 @@ async function syncAllOutputsAsAttachments(
 }
 
 export class PdfActionFactory {
+  private static menuManagerID?: string;
+  private static legacyMenuRegistered = false;
+
   static registerMenuItems() {
-    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon@0.5x.png`;
+    if (!isPluginEnabled()) {
+      this.unregisterMenuItems();
+      return;
+    }
+
+    if (this.legacyMenuRegistered) {
+      return;
+    }
+
+    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon.svg`;
     ztoolkit.Menu.register("item", {
       tag: "menu",
       id: "zotero-itemmenu-zoteropdf2md",
@@ -467,11 +509,128 @@ export class PdfActionFactory {
         },
       ],
     });
+    this.legacyMenuRegistered = true;
+  }
+
+  static unregisterMenuItems() {
+    const menuManager = (Zotero as any).MenuManager;
+    if (
+      this.menuManagerID &&
+      typeof menuManager?.unregisterMenu === "function"
+    ) {
+      menuManager.unregisterMenu(this.menuManagerID);
+      this.menuManagerID = undefined;
+    }
+    if (this.legacyMenuRegistered) {
+      ztoolkit.Menu.unregister("zotero-itemmenu-zoteropdf2md");
+      this.legacyMenuRegistered = false;
+    }
   }
 
   static onMainWindowLoad(_win: _ZoteroTypes.MainWindow) {}
 
   static onMainWindowUnload(_win: Window) {}
+
+  static refreshMenuItems() {
+    this.unregisterMenuItems();
+    if (isPluginEnabled()) {
+      this.registerMenuItems();
+    }
+  }
+
+  private static ensureEnabled() {
+    if (isPluginEnabled()) {
+      return true;
+    }
+    showMessage("插件已停用。请先在插件偏好设置中启用。");
+    return false;
+  }
+
+  private static registerMenuItemsWithMenuManager(): boolean {
+    const menuManager = (Zotero as any).MenuManager;
+    if (typeof menuManager?.registerMenu !== "function") {
+      return false;
+    }
+    if (this.menuManagerID) {
+      return true;
+    }
+
+    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon.svg`;
+    const menuID = menuManager.registerMenu({
+      menuID: "zotero-pdf2md-item-actions",
+      pluginID: addon.data.config.addonID,
+      target: "main/library/item",
+      menus: [
+        {
+          menuType: "submenu",
+          l10nID: getLocaleID("pdf-actions-menu"),
+          icon: menuIcon,
+          onShowing: (_event: Event, context: any) => {
+            context.setVisible(
+              isPluginEnabled() &&
+                (hasSelectedPdfTarget() || hasSelectedMarkdownTarget()),
+            );
+          },
+          menus: [
+            {
+              menuType: "menuitem",
+              l10nID: getLocaleID("pdf-actions-one-click"),
+              icon: menuIcon,
+              onShowing: (_event: Event, context: any) => {
+                context.setVisible(hasSelectedPdfTarget());
+              },
+              onCommand: async () => {
+                await this.runOneClickPipeline();
+              },
+            },
+            {
+              menuType: "separator",
+            },
+            {
+              menuType: "menuitem",
+              l10nID: getLocaleID("pdf-actions-convert"),
+              icon: menuIcon,
+              onShowing: (_event: Event, context: any) => {
+                context.setVisible(hasSelectedPdfTarget());
+              },
+              onCommand: async () => {
+                await this.runSelectedPdfToMarkdown();
+              },
+            },
+            {
+              menuType: "menuitem",
+              l10nID: getLocaleID("pdf-actions-translate"),
+              icon: menuIcon,
+              onShowing: (_event: Event, context: any) => {
+                context.setVisible(hasSelectedPdfTarget());
+              },
+              onCommand: async () => {
+                await this.runSelectedPdfToFinalTranslatedMarkdown();
+              },
+            },
+            {
+              menuType: "menuitem",
+              l10nID: getLocaleID("pdf-actions-generate-note"),
+              icon: menuIcon,
+              onShowing: (_event: Event, context: any) => {
+                context.setVisible(hasSelectedMarkdownTarget());
+              },
+              onCommand: async () => {
+                await this.runSelectedMarkdownToNote();
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!menuID) {
+      return false;
+    }
+
+    this.menuManagerID = menuID;
+    return true;
+  }
 
   private static async getRunnableTargets() {
     const targets = getSelectedPdfTargets();
@@ -520,18 +679,27 @@ export class PdfActionFactory {
   }
 
   static async runSelectedPdfToMarkdown() {
+    if (!this.ensureEnabled()) {
+      return;
+    }
+
     const targets = await this.getRunnableTargets();
     if (!targets.length) {
-      showMessage("未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。");
+      showMessage(
+        "未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。",
+      );
       return;
     }
 
     for (const target of targets) {
       const outDir = getOutputDirForPdf(target.pdfPath);
-      const progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
-        closeOnClick: true,
-        closeTime: -1,
-      })
+      const progressWin = new ztoolkit.ProgressWindow(
+        addon.data.config.addonName,
+        {
+          closeOnClick: true,
+          closeTime: -1,
+        },
+      )
         .createLine({
           text: `正在处理 PDF 转 Markdown：${target.title}`,
           type: "default",
@@ -560,15 +728,23 @@ export class PdfActionFactory {
   }
 
   static async runSelectedPdfToFinalTranslatedMarkdown() {
+    if (!this.ensureEnabled()) {
+      return;
+    }
+
     const targets = await this.getRunnableTargets();
     if (!targets.length) {
-      showMessage("未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。");
+      showMessage(
+        "未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。",
+      );
       return;
     }
 
     const llmApiKey = getLlmApiKey();
     if (!llmApiKey) {
-      showMessage("未配置 LLM 接口。请先在插件偏好设置中填写 LLM API 密钥、Base URL 和模型名称。");
+      showMessage(
+        "未配置 LLM 接口。请先在插件偏好设置中填写 LLM API 密钥、Base URL 和模型名称。",
+      );
       return;
     }
 
@@ -588,10 +764,13 @@ export class PdfActionFactory {
         continue;
       }
 
-      const progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
-        closeOnClick: true,
-        closeTime: -1,
-      })
+      const progressWin = new ztoolkit.ProgressWindow(
+        addon.data.config.addonName,
+        {
+          closeOnClick: true,
+          closeTime: -1,
+        },
+      )
         .createLine({
           text: `正在翻译 ${sourceLabel} → ${targetLabel}：${target.title}`,
           type: "default",
@@ -642,21 +821,29 @@ export class PdfActionFactory {
   }
 
   static async runSelectedMarkdownToNote() {
-    const targets = (await this.getRunnableMarkdownTargets()).filter((target) => (
-      target.title === "pdf2md-译文" ||
-      /(?:^|\/)target\.md$/i.test(target.markdownPath) ||
-      /译文|翻译 Markdown/.test(target.title)
-    ));
+    if (!this.ensureEnabled()) {
+      return;
+    }
+
+    const targets = (await this.getRunnableMarkdownTargets()).filter(
+      (target) =>
+        target.title === "pdf2md-译文" ||
+        /(?:^|\/)target\.md$/i.test(target.markdownPath) ||
+        /译文|翻译 Markdown/.test(target.title),
+    );
     if (!targets.length) {
       showMessage("未找到可处理的译文 Markdown 附件。请先选择 pdf2md-译文。");
       return;
     }
 
     for (const target of targets) {
-      const progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
-        closeOnClick: true,
-        closeTime: -1,
-      })
+      const progressWin = new ztoolkit.ProgressWindow(
+        addon.data.config.addonName,
+        {
+          closeOnClick: true,
+          closeTime: -1,
+        },
+      )
         .createLine({
           text: `正在生成译文 Note：${target.title}`,
           type: "default",
@@ -665,7 +852,10 @@ export class PdfActionFactory {
         .show();
 
       try {
-        await this.generateNoteFromMarkdown(target.sourceItem, target.markdownPath);
+        await this.generateNoteFromMarkdown(
+          target.sourceItem,
+          target.markdownPath,
+        );
         progressWin.changeLine({
           progress: 100,
           text: `已完成译文 Note：${target.title}`,
@@ -743,15 +933,23 @@ export class PdfActionFactory {
   }
 
   static async runOneClickPipeline() {
+    if (!this.ensureEnabled()) {
+      return;
+    }
+
     const targets = await this.getRunnableTargets();
     if (!targets.length) {
-      showMessage("未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。");
+      showMessage(
+        "未找到可处理的 PDF 附件。请先选择 PDF 附件或包含 PDF 的条目。",
+      );
       return;
     }
 
     const llmApiKey = getLlmApiKey();
     if (!llmApiKey) {
-      showMessage("未配置 LLM 接口。请先在插件偏好设置中填写 LLM API 密钥、Base URL 和模型名称。");
+      showMessage(
+        "未配置 LLM 接口。请先在插件偏好设置中填写 LLM API 密钥、Base URL 和模型名称。",
+      );
       return;
     }
 
@@ -761,10 +959,13 @@ export class PdfActionFactory {
       const outDir = getOutputDirForPdf(target.pdfPath);
       const targetMdPath = PathUtils.join(outDir, "target.md");
 
-      const progressWin = new ztoolkit.ProgressWindow(addon.data.config.addonName, {
-        closeOnClick: true,
-        closeTime: -1,
-      })
+      const progressWin = new ztoolkit.ProgressWindow(
+        addon.data.config.addonName,
+        {
+          closeOnClick: true,
+          closeTime: -1,
+        },
+      )
         .createLine({
           text: `[1/3] 正在 OCR：${target.title}`,
           type: "default",
@@ -779,7 +980,9 @@ export class PdfActionFactory {
 
         // Stage 2: Translation
         const progress = await readTranslationProgress(outDir);
-        let translateResult: Awaited<ReturnType<typeof buildFinalTranslatedMarkdown>>;
+        let translateResult: Awaited<
+          ReturnType<typeof buildFinalTranslatedMarkdown>
+        >;
 
         if (fileExists(targetMdPath) && progress?.status === "done") {
           translateResult = {
@@ -808,7 +1011,8 @@ export class PdfActionFactory {
           const pollId = win.setInterval(async () => {
             const p = await readTranslationProgress(outDir);
             if (p && p.total_chunks > 0) {
-              const pct = 30 + Math.round((p.current_chunk / p.total_chunks) * 50);
+              const pct =
+                30 + Math.round((p.current_chunk / p.total_chunks) * 50);
               progressWin.changeLine({
                 text: `[2/3] 翻译第 ${p.current_chunk}/${p.total_chunks} 块：${target.title}`,
                 progress: pct,
@@ -821,7 +1025,10 @@ export class PdfActionFactory {
           } finally {
             win.clearInterval(pollId);
           }
-          await syncAllOutputsAsAttachments(target.sourceItem, translateResult.outDir);
+          await syncAllOutputsAsAttachments(
+            target.sourceItem,
+            translateResult.outDir,
+          );
         }
 
         // Stage 3: Note
@@ -829,7 +1036,10 @@ export class PdfActionFactory {
           text: `[3/3] 生成译文 Note：${target.title}`,
           progress: 85,
         });
-        await this.generateNoteFromMarkdown(target.sourceItem, translateResult.finalMarkdownPath);
+        await this.generateNoteFromMarkdown(
+          target.sourceItem,
+          translateResult.finalMarkdownPath,
+        );
 
         progressWin.changeLine({
           progress: 100,

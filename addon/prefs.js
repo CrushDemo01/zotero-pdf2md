@@ -5,6 +5,8 @@ pref("mistralApiKey", "");
 pref("llmApiKey", "");
 pref("llmApiUrl", "https://api.openai.com/v1");
 pref("llmModel", "gpt-5-mini");
+pref("translationChunkChars", 12000);
+pref("skipReferenceTranslation", true);
 pref("llmProfiles", "[]");
 pref("llmActiveProfile", "");
 pref("reviewGeneratedHtml", true);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process, URL */
 
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
@@ -100,7 +101,9 @@ function getFallbackSearchRoots(markdownPath) {
 const recursiveSearchCache = new Map();
 
 async function findFileUnderRoot(rootDir, relativeTarget) {
-  const normalizedSuffix = relativeTarget.replace(/\\/g, "/").replace(/^\/+/, "");
+  const normalizedSuffix = relativeTarget
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
   const cacheKey = `${rootDir}::${normalizedSuffix}`;
   if (recursiveSearchCache.has(cacheKey)) {
     return recursiveSearchCache.get(cacheKey);
@@ -248,18 +251,26 @@ function createMarkdownRenderer() {
   md.renderer.rules.image = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     const src = token.attrGet("src") || "";
-    const markdownPath = typeof env?.markdownPath === "string" ? env.markdownPath : "";
+    const markdownPath =
+      typeof env?.markdownPath === "string" ? env.markdownPath : "";
     const resolved = resolveMarkdownTarget(markdownPath, src);
-    token.attrSet("src", isAbsoluteLink(resolved) ? resolved : toFileUri(resolved));
+    token.attrSet(
+      "src",
+      isAbsoluteLink(resolved) ? resolved : toFileUri(resolved),
+    );
     return defaultImageRule(tokens, idx, options, env, self);
   };
 
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
     const href = token.attrGet("href") || "";
-    const markdownPath = typeof env?.markdownPath === "string" ? env.markdownPath : "";
+    const markdownPath =
+      typeof env?.markdownPath === "string" ? env.markdownPath : "";
     const resolved = resolveMarkdownTarget(markdownPath, href);
-    token.attrSet("href", isAbsoluteLink(resolved) ? resolved : toFileUri(resolved));
+    token.attrSet(
+      "href",
+      isAbsoluteLink(resolved) ? resolved : toFileUri(resolved),
+    );
     return defaultLinkOpenRule(tokens, idx, options, env, self);
   };
 
@@ -312,7 +323,10 @@ async function main() {
   const inputPath = path.resolve(input);
   const outputPath = output
     ? path.resolve(output)
-    : path.join(path.dirname(inputPath), `${path.basename(inputPath, path.extname(inputPath))}.preview.html`);
+    : path.join(
+        path.dirname(inputPath),
+        `${path.basename(inputPath, path.extname(inputPath))}.preview.html`,
+      );
   const markdown = await fs.readFile(inputPath, "utf8");
   const prepared = await inlineLocalImages(inputPath, markdown);
   const renderer = createMarkdownRenderer();

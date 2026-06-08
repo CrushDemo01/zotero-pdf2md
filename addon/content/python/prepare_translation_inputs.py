@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from workflow_common import run_step
+from workflow_common import run_step, run_step_with_outputs
 
 DEFAULT_MISTRAL_MD_NAME = "mistral.md"
 DEFAULT_OCR_JSON_NAME = "ocr.json"
@@ -144,7 +144,7 @@ def main() -> int:
         if args.keep_inline_images:
             mistral_cmd.append("--keep-inline-images")
         mistral_cmd.extend(["--table-format", args.table_format])
-        run_step(mistral_cmd)
+        run_step_with_outputs(mistral_cmd, [ocr_md])
 
     if not args.skip_assets:
         extract_cmd = [

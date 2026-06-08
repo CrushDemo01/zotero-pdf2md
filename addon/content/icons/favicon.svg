@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="56" ry="56" fill="url(#bg)"/>
+
+  <g transform="translate(128 128)">
+    <rect x="-80" y="-54" width="160" height="108" rx="18" ry="18"
+          fill="none" stroke="#FFFFFF" stroke-width="10"/>
+
+    <path d="M-52 -24 L-52 24 L-38 24 L-38 -4 L-22 22 L-6 -4 L-6 24 L8 24 L8 -24 L-10 -24 L-22 2 L-34 -24 Z"
+          fill="#FFFFFF"/>
+
+    <path d="M32 -24 L32 10 L18 10 L40 34 L62 10 L48 10 L48 -24 Z"
+          fill="#FFFFFF"/>
+  </g>
+
+  <g transform="translate(40 40)">
+    <rect x="0" y="0" width="56" height="22" rx="6" ry="6" fill="#EF4444"/>
+    <text x="28" y="16" text-anchor="middle"
+          font-family="Helvetica, Arial, sans-serif"
+          font-size="14" font-weight="900" fill="#FFFFFF" letter-spacing="1.5">PDF</text>
+  </g>
+</svg>

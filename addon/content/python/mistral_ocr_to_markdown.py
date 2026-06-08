@@ -6,8 +6,8 @@ import base64
 import json
 import os
 import re
-import subprocess
-import tempfile
+import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -128,9 +128,6 @@ def replace_table_placeholders(markdown: str, table_refs: dict[str, str], inline
     return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", repl, markdown)
 
 
-import time
-
-
 def call_api_with_retry(
     func,
     *args,
@@ -157,7 +154,10 @@ def call_api_with_retry(
                 break
             
             delay = initial_delay * (2 ** attempt)
-            print(f"Mistral API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}. Retrying in {delay:.1f}s...")
+            print(
+                f"Mistral API call failed (attempt {attempt + 1}/{max_retries}): {error_msg}. Retrying in {delay:.1f}s...",
+                file=sys.stderr,
+            )
             time.sleep(delay)
     
     raise last_error or RuntimeError("Mistral API call failed after retries")
@@ -472,7 +472,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--signed-url-expiry-minutes",
         type=int,
         default=10,
-        help="Deprecated option kept for compatibility; ignored in REST mode",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--inline-images",
@@ -536,6 +536,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception as e:
-        import sys
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)

@@ -183,9 +183,9 @@ function buildNoteKey(parentID: number, metadata: ResultNoteMetadata) {
 }
 
 async function readTextFile(filePath: string): Promise<string | undefined> {
-  const file = (Components.classes as any)["@mozilla.org/file/local;1"].createInstance(
-    (Components.interfaces as any).nsIFile,
-  );
+  const file = (Components.classes as any)[
+    "@mozilla.org/file/local;1"
+  ].createInstance((Components.interfaces as any).nsIFile);
   file.initWithPath(filePath);
   if (!file.exists()) {
     return undefined;
@@ -288,7 +288,8 @@ function getFallbackSearchRoots(markdownPath: string) {
   return Array.from(
     new Set(
       roots.filter(
-        (root): root is string => !!root && typeof root === "string" && pathExists(root),
+        (root): root is string =>
+          !!root && typeof root === "string" && pathExists(root),
       ),
     ),
   );
@@ -429,10 +430,7 @@ async function inlineLocalImages(markdownPath: string, markdown: string) {
   );
 }
 
-async function readMarkdownExcerpt(
-  markdownPath: string,
-  excerptChars: number,
-) {
+async function readMarkdownExcerpt(markdownPath: string, excerptChars: number) {
   const text = await readTextFile(markdownPath);
   if (!text) {
     return undefined;
@@ -464,10 +462,7 @@ async function readMarkdownExcerpt(
   return `${clipped.trimEnd()}\n\n[...]`;
 }
 
-function buildMarkdownExcerptSection(
-  markdownPath: string,
-  excerpt: string,
-) {
+function buildMarkdownExcerptSection(markdownPath: string, excerpt: string) {
   return [
     `<details>`,
     `<summary>${buildPathLink(markdownPath, basename(markdownPath))}</summary>`,
@@ -636,7 +631,8 @@ function normalizeLatexExpression(input: string) {
 function normalizeMarkdownMath(markdown: string) {
   let normalized = markdown.replace(
     /\$\$([\s\S]*?)\$\$/g,
-    (full, expression: string) => `$$\n${normalizeLatexExpression(expression.trim())}\n$$`,
+    (full, expression: string) =>
+      `$$\n${normalizeLatexExpression(expression.trim())}\n$$`,
   );
 
   normalized = normalized.replace(
@@ -675,7 +671,9 @@ function wrapInlineLatexSpans(line: string) {
     return line;
   }
 
-  const segments = line.split(/([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u3400-\u4dbf\uff0c\u3001\u3002\uff1b\uff1a\uff01\uff1f\u300a\u300b\u201c\u201d]+)/);
+  const segments = line.split(
+    /([\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u3400-\u4dbf\uff0c\u3001\u3002\uff1b\uff1a\uff01\uff1f\u300a\u300b\u201c\u201d]+)/,
+  );
   return segments
     .map((seg) => {
       if (CJK_RE.test(seg)) {
@@ -858,10 +856,7 @@ export interface MarkdownPreviewNoteMetadata {
   };
 }
 
-async function loadExcerptMap(
-  markdownPaths: string[],
-  excerptChars: number,
-) {
+async function loadExcerptMap(markdownPaths: string[], excerptChars: number) {
   const excerptMap = new Map<string, string>();
   for (const markdownPath of markdownPaths) {
     try {
@@ -877,7 +872,9 @@ async function loadExcerptMap(
 }
 
 function itemLooksLikeNote(item: any) {
-  return typeof item?.isNote === "function" ? item.isNote() : item?.itemType === "note";
+  return typeof item?.isNote === "function"
+    ? item.isNote()
+    : item?.itemType === "note";
 }
 
 function getNoteText(item: any) {
@@ -952,7 +949,10 @@ export async function upsertMarkdownPreviewNote(
       slugifyKey(metadata.title),
       slugifyKey(metadata.markdownPath),
     ].join(":");
-  const contentHtml = await renderMarkdownToHtml(metadata.markdownPath, markdown);
+  const contentHtml = await renderMarkdownToHtml(
+    metadata.markdownPath,
+    markdown,
+  );
   const validationHtml =
     metadata.validation && metadata.validation.status !== "pass"
       ? [
@@ -993,12 +993,12 @@ export async function upsertMarkdownPreviewNote(
     `</section>`,
   ].join("");
 
-  let note = await findExistingChildNote(
+  let note = (await findExistingChildNote(
     parentID,
     noteKey,
     metadata.existingNoteID,
     PREVIEW_NOTE_MARKER,
-  ) as ResultNoteSourceItem | undefined;
+  )) as ResultNoteSourceItem | undefined;
 
   if (!note) {
     note = new Zotero.Item("note") as ResultNoteSourceItem;
@@ -1024,11 +1024,11 @@ export async function upsertResultNote(
   const excerptMap = await loadExcerptMap(metadata.markdownPaths, excerptChars);
   const html = buildResultNoteHtml(metadata, noteKey, excerptMap);
 
-  let note = await findExistingChildNote(
+  let note = (await findExistingChildNote(
     parentID,
     noteKey,
     metadata.existingNoteID,
-  ) as ResultNoteSourceItem | undefined;
+  )) as ResultNoteSourceItem | undefined;
 
   if (!note) {
     note = new Zotero.Item("note") as ResultNoteSourceItem;

@@ -26,12 +26,29 @@ function getBooleanPref(name: string, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function getIntegerPref(
+  name: string,
+  fallback: number,
+  min: number,
+  max: number,
+) {
+  const value = (getPref as any)(name);
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+}
+
 function ensureParentDir(dirPath: string) {
   const dir = (Components.classes as any)[
     "@mozilla.org/file/local;1"
-  ].createInstance(
-    (Components.interfaces as any).nsIFile,
-  );
+  ].createInstance((Components.interfaces as any).nsIFile);
   dir.initWithPath(dirPath);
   if (!dir.exists()) {
     dir.create((Components.interfaces as any).nsIFile.DIRECTORY_TYPE, 0o755);
@@ -93,16 +110,15 @@ function getProfileDir() {
 }
 
 async function ensureBundledScriptsDir() {
-  const scriptsDir = PathUtils.join(
-    getProfileDir(),
-    "zotero-pdf2md-python",
-  );
+  const scriptsDir = PathUtils.join(getProfileDir(), "zotero-pdf2md-python");
   await (Zotero as any).File.createDirectoryIfMissingAsync(scriptsDir);
 
   for (const fileName of BUNDLED_SCRIPT_FILES) {
     const sourceURL = `${rootURI}content/python/${fileName}`;
     const targetPath = PathUtils.join(scriptsDir, fileName);
-    const content = await (Zotero as any).File.getContentsFromURLAsync(sourceURL);
+    const content = await (Zotero as any).File.getContentsFromURLAsync(
+      sourceURL,
+    );
     await (Zotero as any).File.putContentsAsync(targetPath, content, "utf-8");
   }
 
@@ -117,9 +133,7 @@ function pathExists(filePath: string) {
   try {
     const file = (Components.classes as any)[
       "@mozilla.org/file/local;1"
-    ].createInstance(
-      (Components.interfaces as any).nsIFile,
-    );
+    ].createInstance((Components.interfaces as any).nsIFile);
     file.initWithPath(filePath);
     return file.exists();
   } catch (_error) {
@@ -150,7 +164,10 @@ function buildPrepareCommand(
     throw new Error("MISTRAL_API_KEY is not configured in plugin preferences.");
   }
 
-  const scriptPath = PathUtils.join(scriptsDir, "prepare_translation_inputs.py");
+  const scriptPath = PathUtils.join(
+    scriptsDir,
+    "prepare_translation_inputs.py",
+  );
   const logPath = PathUtils.join(outDir, "prepare.log");
   const parts = [
     `export MISTRAL_API_KEY=${shellQuote(mistralApiKey)}`,
@@ -200,9 +217,17 @@ function buildFinalTranslationCommand(
   const shellPath = getPref("shellPath") || "/bin/zsh";
   const pythonPath = getPref("pythonPath") || "python3";
   const mistralApiKey = getPref("mistralApiKey");
-  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiKey =
+    getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
   const llmApiUrl = getStringPref("llmApiUrl") || "https://api.openai.com/v1";
   const llmModel = getStringPref("llmModel") || "gpt-5-mini";
+  const chunkChars = getIntegerPref(
+    "translationChunkChars",
+    12000,
+    2000,
+    50000,
+  );
+  const skipReferences = getBooleanPref("skipReferenceTranslation", true);
   const inlineImages = getPref("inlineImages");
   const pdfFile = PathUtils.filename(pdfPath) || "paper.pdf";
   const stem = slugify(pdfFile);
@@ -222,13 +247,16 @@ function buildFinalTranslationCommand(
     `export OPENAI_API_KEY=${shellQuote(llmApiKey)}`,
     `export SOURCE_LANGUAGE=${shellQuote(sourceLanguage)}`,
     `export TARGET_LANGUAGE=${shellQuote(targetLanguage)}`,
-    `${shellQuote(pythonPath)} ${shellQuote(scriptPath)} --pdf ${shellQuote(pdfPath)} --outdir ${shellQuote(outDir)} --out-md ${shellQuote(outMd)} --title ${shellQuote(stem)} --api-base ${shellQuote(llmApiUrl)} --model ${shellQuote(llmModel)} --table-format markdown`,
+    `${shellQuote(pythonPath)} ${shellQuote(scriptPath)} --pdf ${shellQuote(pdfPath)} --outdir ${shellQuote(outDir)} --out-md ${shellQuote(outMd)} --title ${shellQuote(stem)} --source-language ${shellQuote(sourceLanguage)} --target-language ${shellQuote(targetLanguage)} --chunk-chars ${chunkChars} --api-base ${shellQuote(llmApiUrl)} --model ${shellQuote(llmModel)} --table-format markdown`,
   ];
   if (inlineImages) {
     parts[4] += " --inline-images";
   }
   if (skipPrepare) {
     parts[4] += " --skip-prepare";
+  }
+  if (skipReferences) {
+    parts[4] += " --skip-references";
   }
   if (startChunk && startChunk > 1) {
     parts[4] += ` --start-chunk ${startChunk}`;
@@ -249,7 +277,8 @@ function buildHtmlReviewCommand(
 ) {
   const shellPath = getPref("shellPath") || "/bin/zsh";
   const pythonPath = getPref("pythonPath") || "python3";
-  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiKey =
+    getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
   const llmApiUrl = getStringPref("llmApiUrl") || "https://api.openai.com/v1";
   const llmModel = getStringPref("llmModel") || "gpt-5-mini";
   const scriptPath = PathUtils.join(scriptsDir, "review_markdown_html.py");
@@ -282,40 +311,29 @@ function runProcess(executable: string, args: string[], logPath?: string) {
   return new Promise<void>((resolve, reject) => {
     const file = (Components.classes as any)[
       "@mozilla.org/file/local;1"
-    ].createInstance(
-      (Components.interfaces as any).nsIFile,
-    );
+    ].createInstance((Components.interfaces as any).nsIFile);
     file.initWithPath(executable);
 
     const process = (Components.classes as any)[
       "@mozilla.org/process/util;1"
-    ].createInstance(
-      (Components.interfaces as any).nsIProcess,
-    );
+    ].createInstance((Components.interfaces as any).nsIProcess);
     process.init(file);
     process.runwAsync(args, args.length, {
       observe: async (_subject: unknown, topic: string) => {
         if (topic === "process-finished") {
-          const exitValue = typeof process.exitValue === "number" ? process.exitValue : 0;
+          const exitValue =
+            typeof process.exitValue === "number" ? process.exitValue : 0;
           if (exitValue === 0) {
             resolve();
             return;
           }
           const logTail = logPath ? await readLogTail(logPath) : "";
           const fallback = `命令执行失败，退出码 ${exitValue}`;
-          reject(
-            new Error(
-              withLogPath(logTail || fallback),
-            ),
-          );
+          reject(new Error(withLogPath(logTail || fallback)));
         } else {
           const logTail = logPath ? await readLogTail(logPath) : "";
           const fallback = `Process ended with topic: ${topic}`;
-          reject(
-            new Error(
-              withLogPath(logTail || fallback),
-            ),
-          );
+          reject(new Error(withLogPath(logTail || fallback)));
         }
       },
     });
@@ -390,7 +408,8 @@ export async function reviewMarkdownWithHtml(
   title: string,
 ) {
   const reviewEnabled = getBooleanPref("reviewGeneratedHtml", true);
-  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiKey =
+    getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
   if (!reviewEnabled || !llmApiKey) {
     return {
       skipped: true,
@@ -399,7 +418,12 @@ export async function reviewMarkdownWithHtml(
   }
 
   const scriptsDir = await ensureBundledScriptsDir();
-  const command = buildHtmlReviewCommand(markdownPath, htmlPath, scriptsDir, title);
+  const command = buildHtmlReviewCommand(
+    markdownPath,
+    htmlPath,
+    scriptsDir,
+    title,
+  );
   await runProcess(command.executable, command.args, command.logPath);
   return {
     skipped: false,
@@ -427,7 +451,8 @@ function buildNoteValidationCommand(
 ) {
   const shellPath = getPref("shellPath") || "/bin/zsh";
   const pythonPath = getPref("pythonPath") || "python3";
-  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiKey =
+    getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
   const llmApiUrl = getStringPref("llmApiUrl") || "https://api.openai.com/v1";
   const llmModel = getStringPref("llmModel") || "gpt-5-mini";
   const scriptPath = PathUtils.join(scriptsDir, "validate_note_structure.py");
@@ -457,7 +482,8 @@ export async function validateMarkdownNoteStructure(
   title: string,
 ): Promise<NoteStructureValidationResult> {
   const reviewEnabled = getBooleanPref("reviewGeneratedHtml", true);
-  const llmApiKey = getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
+  const llmApiKey =
+    getStringPref("llmApiKey") || getStringPref("OPENAI_API_KEY");
   if (!reviewEnabled || !llmApiKey) {
     return {
       skipped: true,
@@ -466,12 +492,19 @@ export async function validateMarkdownNoteStructure(
   }
 
   const scriptsDir = await ensureBundledScriptsDir();
-  const command = buildNoteValidationCommand(markdownPath, htmlPath, scriptsDir, title);
+  const command = buildNoteValidationCommand(
+    markdownPath,
+    htmlPath,
+    scriptsDir,
+    title,
+  );
   await runProcess(command.executable, command.args, command.logPath);
 
   const raw = await readTextFile(command.reportPath);
   if (!raw.trim()) {
-    throw new Error(`Note structure validation report is empty: ${command.reportPath}`);
+    throw new Error(
+      `Note structure validation report is empty: ${command.reportPath}`,
+    );
   }
   const report = JSON.parse(raw) as {
     status?: "pass" | "warn" | "fail";

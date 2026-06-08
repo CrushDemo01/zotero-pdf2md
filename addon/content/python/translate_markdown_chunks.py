@@ -24,28 +24,91 @@ from workflow_common import (
 
 DEFAULT_MODEL = "gpt-5-mini"
 DEFAULT_API_BASE = "https://api.openai.com/v1"
-SYSTEM_PROMPT = (
-    "You are translating an academic paper into Chinese markdown. "
-    "Return only the translated markdown for the current chunk. "
-    "Preserve markdown image syntax, equations, citations, and table "
-    "structure. Keep model names, method names, and citation keys in "
-    "their original form. Translate section headings to Chinese when "
-    "appropriate. Do not add explanations, YAML, code fences around the "
-    "whole answer, or placeholder text. "
-    "IMPORTANT: All mathematical expressions MUST be wrapped in LaTeX "
-    "delimiters. Use single dollar signs ($...$) for inline math and "
-    "double dollar signs ($$...$$) for display/block math equations. "
-    "Never leave LaTeX commands like \\mathbf, \\begin, \\frac, "
-    "\\operatorname, \\left, \\right etc. unwrapped without dollar "
-    "sign delimiters. Every formula, variable, and equation must have "
-    "proper delimiters. "
-    "If the input contains markers like "
-    "[[[PDF2MD_IMAGE_1]]], keep every marker exactly unchanged unless the OCR "
-    "placement is clearly wrong. You must check image placement against the "
-    "rendered PDF pages and, when needed, move the image marker so the image "
-    "appears near the paragraph that actually discusses it."
-)
+LANGUAGE_LABELS = {
+    "auto": "the detected source language",
+    "zh-CN": "Simplified Chinese",
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "fr": "French",
+    "de": "German",
+    "es": "Spanish",
+    "ru": "Russian",
+    "pt-BR": "Portuguese (Brazil)",
+}
+OUTPUT_TRANSLATION_LABELS = {
+    "zh-CN": "简体中文译稿",
+    "en": "English translation",
+    "ja": "Japanese translation",
+    "ko": "Korean translation",
+    "fr": "French translation",
+    "de": "German translation",
+    "es": "Spanish translation",
+    "ru": "Russian translation",
+    "pt-BR": "Portuguese (Brazil) translation",
+}
 IMAGE_TOKEN_RE = r"\[\[\[PDF2MD_IMAGE_(\d+)\]\]\]"
+REFERENCE_SECTION_RE = re.compile(
+    r"^(?:\d+(?:\.\d+)*\.?\s*)?"
+    r"(?:references?|bibliography|reference list|works cited|literature cited|"
+    r"参考文献|参考资料|文献|bibliographie|referencias)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def language_label(tag: str) -> str:
+    return LANGUAGE_LABELS.get(tag, tag)
+
+
+def translation_output_label(tag: str) -> str:
+    return OUTPUT_TRANSLATION_LABELS.get(tag, f"{language_label(tag)} translation")
+
+
+def normalize_section_title(title: str) -> str:
+    normalized = title.strip()
+    normalized = re.sub(r"（第\d+段）$", "", normalized)
+    normalized = re.sub(r"\s*\(part\s+\d+\)$", "", normalized, flags=re.IGNORECASE)
+    return normalized.strip()
+
+
+def is_reference_chunk_title(title: str) -> bool:
+    return bool(REFERENCE_SECTION_RE.match(normalize_section_title(title)))
+
+
+def build_ocr_passthrough_body(chunk) -> str:
+    parts: list[str] = []
+    heading = getattr(chunk, "heading", None)
+    if heading:
+        parts.append(str(heading).strip())
+    body = str(chunk.body or "").strip()
+    if body:
+        parts.append(body)
+    return "\n\n".join(part for part in parts if part).strip()
+
+
+def build_system_prompt(target_language: str) -> str:
+    target_label = language_label(target_language)
+    return (
+        f"You are translating an academic paper into {target_label} markdown. "
+        "Return only the translated markdown for the current chunk. "
+        "Preserve markdown image syntax, equations, citations, and table "
+        "structure. Keep model names, method names, and citation keys in "
+        "their original form. Translate section headings when appropriate. "
+        "Do not add explanations, YAML, code fences around the whole answer, "
+        "or placeholder text. "
+        "IMPORTANT: All mathematical expressions MUST be wrapped in LaTeX "
+        "delimiters. Use single dollar signs ($...$) for inline math and "
+        "double dollar signs ($$...$$) for display/block math equations. "
+        "Never leave LaTeX commands like \\mathbf, \\begin, \\frac, "
+        "\\operatorname, \\left, \\right etc. unwrapped without dollar "
+        "sign delimiters. Every formula, variable, and equation must have "
+        "proper delimiters. "
+        "If the input contains markers like "
+        "[[[PDF2MD_IMAGE_1]]], keep every marker exactly unchanged unless the OCR "
+        "placement is clearly wrong. You must check image placement against the "
+        "rendered PDF pages and, when needed, move the image marker so the image "
+        "appears near the paragraph that actually discusses it."
+    )
 
 
 def get_env_or_raise(name: str) -> str:
@@ -53,6 +116,8 @@ def get_env_or_raise(name: str) -> str:
     if not value:
         raise RuntimeError(f"Missing environment variable: {name}")
     return value
+
+
 def _build_endpoint(api_base: str, default_path: str) -> str:
     base = api_base.rstrip("/")
     if base.endswith("/chat/completions") or base.endswith("/responses"):
@@ -70,6 +135,7 @@ def call_chat_completions_api(
     model: str,
     api_base: str,
     prompt: str,
+    target_language: str,
 ) -> str:
     url = _build_endpoint(api_base, "/chat/completions")
     payload = {
@@ -77,7 +143,7 @@ def call_chat_completions_api(
         "messages": [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT,
+                "content": build_system_prompt(target_language),
             },
             {
                 "role": "user",
@@ -140,6 +206,8 @@ def build_chunk_prompt(
     asset_summary: str,
     pages_dir: str,
     ocr_json_path: str,
+    source_language: str,
+    target_language: str,
     prev_context: str = "",
 ) -> str:
     context_block = ""
@@ -151,13 +219,15 @@ def build_chunk_prompt(
         )
     return (
         f"Paper title: {title}\n\n"
+        f"Source language: {language_label(source_language)}\n"
+        f"Target language: {language_label(target_language)}\n\n"
         f"Current chunk title: {chunk_title}\n\n"
         f"{context_block}"
         f"Rendered PDF pages directory: {pages_dir}\n"
         f"OCR response JSON: {ocr_json_path}\n\n"
         "Asset index summary for reference:\n"
         f"{asset_summary}\n\n"
-        "Translate the following chunk into polished Chinese markdown. Also correct "
+        f"Translate the following chunk into polished {language_label(target_language)} markdown. Also correct "
         "obvious OCR mistakes in headings, captions, and table formatting when the "
         "OCR draft is clearly wrong. Preserve image links and markdown tables. "
         "You must verify image placement against the rendered PDF pages and keep each "
@@ -222,6 +292,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Final translated markdown output path, typically <outdir>/target.md",
     )
     parser.add_argument("--title", help="Document title used in the output file")
+    parser.add_argument(
+        "--source-language",
+        default=os.getenv("SOURCE_LANGUAGE", "auto"),
+        help="Source language tag, e.g. auto, en, zh-CN, ja.",
+    )
+    parser.add_argument(
+        "--target-language",
+        default=os.getenv("TARGET_LANGUAGE", "zh-CN"),
+        help="Target language tag, e.g. zh-CN, en, ja.",
+    )
     parser.add_argument("--ocr-md", type=Path, help="Optional existing OCR markdown path")
     parser.add_argument("--ocr-json", type=Path, help="Optional OCR response JSON path")
     parser.add_argument(
@@ -245,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-prepare",
         action="store_true",
         help="Do not run prepare_translation_inputs.py first",
+    )
+    parser.add_argument(
+        "--skip-references",
+        action="store_true",
+        help="Append reference/bibliography sections from OCR markdown without LLM translation",
     )
     parser.add_argument(
         "--inline-images",
@@ -297,6 +382,7 @@ def call_api_with_retry(
     model: str,
     api_base: str,
     prompt: str,
+    target_language: str,
     max_retries: int = 3,
     initial_delay: float = 2.0,
 ) -> str:
@@ -308,6 +394,7 @@ def call_api_with_retry(
                 model=model,
                 api_base=api_base,
                 prompt=prompt,
+                target_language=target_language,
             )
         except RuntimeError as exc:
             last_error = exc
@@ -415,6 +502,19 @@ def main() -> int:
     prev_context = ""
     for idx in range(start_idx, end_idx + 1):
         chunk = chunks[idx - 1]
+        if args.skip_references and is_reference_chunk_title(chunk.title):
+            passthrough_body = build_ocr_passthrough_body(chunk)
+            write_markdown_chunk(
+                out_md=out_md,
+                title=title,
+                body=passthrough_body,
+                append=bool(idx > 1 or start_idx > 1),
+                translation_label=translation_output_label(args.target_language),
+            )
+            progress["current_chunk"] = idx
+            progress_path.write_text(json.dumps(progress), encoding="utf-8")
+            continue
+
         protected_body, image_map = protect_image_syntax(chunk.body)
         prompt = build_chunk_prompt(
             title=title,
@@ -423,6 +523,8 @@ def main() -> int:
             asset_summary=asset_summary,
             pages_dir=str(pages_dir),
             ocr_json_path=str(ocr_json),
+            source_language=args.source_language,
+            target_language=args.target_language,
             prev_context=prev_context,
         )
         translated = call_api_with_retry(
@@ -430,6 +532,7 @@ def main() -> int:
             model=args.model,
             api_base=args.api_base,
             prompt=prompt,
+            target_language=args.target_language,
         )
         translated = restore_image_syntax(translated, image_map)
 
@@ -438,6 +541,7 @@ def main() -> int:
             title=title,
             body=translated.strip(),
             append=bool(idx > 1 or start_idx > 1),
+            translation_label=translation_output_label(args.target_language),
         )
 
         prev_context = translated.strip()[-500:]

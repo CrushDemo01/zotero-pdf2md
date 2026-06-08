@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,11 +22,28 @@ HEADER_NOTE = (
 class Chunk:
     title: str
     body: str
+    heading: str | None = None
 
 
 def run_step(cmd: list[str]) -> None:
     print("running:", " ".join(cmd))
     subprocess.run(cmd, check=True)
+
+
+def run_step_with_outputs(cmd: list[str], expected_outputs: list[Path]) -> None:
+    print("running:", " ".join(cmd))
+    result = subprocess.run(cmd)
+    if result.returncode == 0:
+        return
+
+    missing = [p for p in expected_outputs if not (p.exists() and p.stat().st_size > 0)]
+    if missing:
+        raise subprocess.CalledProcessError(result.returncode, cmd)
+
+    print(
+        f"WARNING: step exited with code {result.returncode} but all expected outputs were produced; treating as success.",
+        file=sys.stderr,
+    )
 
 
 def load_manifest(outdir: Path) -> dict:
@@ -62,7 +80,7 @@ def split_markdown_sections(text: str) -> list[Chunk]:
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
         body = text[start:end].strip()
         if body:
-            chunks.append(Chunk(title=title, body=body))
+            chunks.append(Chunk(title=title, body=body, heading=match.group(0).strip()))
     return chunks
 
 
@@ -73,7 +91,7 @@ def split_large_chunk(chunk: Chunk, max_chars: int) -> list[Chunk]:
 
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
     if not paragraphs:
-        return [Chunk(title=chunk.title, body=body[:max_chars])]
+        return [Chunk(title=chunk.title, body=body[:max_chars], heading=chunk.heading)]
 
     out: list[Chunk] = []
     part = 1
@@ -83,7 +101,13 @@ def split_large_chunk(chunk: Chunk, max_chars: int) -> list[Chunk]:
     for para in paragraphs:
         addition = len(para) + (2 if current else 0)
         if current and current_len + addition > max_chars:
-            out.append(Chunk(title=f"{chunk.title}（第{part}段）", body="\n\n".join(current)))
+            out.append(
+                Chunk(
+                    title=f"{chunk.title}（第{part}段）",
+                    body="\n\n".join(current),
+                    heading=chunk.heading if part == 1 else None,
+                )
+            )
             part += 1
             current = [para]
             current_len = len(para)
@@ -93,7 +117,13 @@ def split_large_chunk(chunk: Chunk, max_chars: int) -> list[Chunk]:
 
     if current:
         suffix = f"（第{part}段）" if part > 1 else ""
-        out.append(Chunk(title=f"{chunk.title}{suffix}", body="\n\n".join(current)))
+        out.append(
+            Chunk(
+                title=f"{chunk.title}{suffix}",
+                body="\n\n".join(current),
+                heading=chunk.heading if part == 1 else None,
+            )
+        )
 
     return out
 
@@ -127,6 +157,7 @@ def write_markdown_chunk(
     body: str,
     append: bool,
     chunk_label: str | None = None,
+    translation_label: str = "中文译稿",
 ) -> None:
     body = body.strip()
     if not body:
@@ -141,7 +172,7 @@ def write_markdown_chunk(
             handle.write("".join(parts))
         return
 
-    parts = [f"# {title}（中文译稿）\n\n", HEADER_NOTE, "\n"]
+    parts = [f"# {title}（{translation_label}）\n\n", HEADER_NOTE, "\n"]
     if chunk_label:
         parts.append(f"## {chunk_label}\n\n")
     parts.append(body)

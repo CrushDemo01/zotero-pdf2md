@@ -1,11 +1,12 @@
 import { config } from "../../package.json";
 import { getPref, setPref } from "../utils/prefs";
+import { PdfActionFactory } from "./pdfActions";
 
 interface LlmProfile {
   name: string;
-  apiKey: string;
   apiUrl: string;
   model: string;
+  apiKey?: string;
 }
 
 function getDoc() {
@@ -30,13 +31,16 @@ function readProfiles(): LlmProfile[] {
 }
 
 function saveProfiles(profiles: LlmProfile[]) {
-  setPref("llmProfiles", JSON.stringify(profiles));
+  const sanitized = profiles.map(({ name, apiUrl, model }) => ({
+    name,
+    apiUrl,
+    model,
+  }));
+  setPref("llmProfiles", JSON.stringify(sanitized));
 }
 
 function rebuildProfileMenu() {
-  const popup = el(
-    `zotero-prefpane-${config.addonRef}-llm-profile-popup`,
-  );
+  const popup = el(`zotero-prefpane-${config.addonRef}-llm-profile-popup`);
   if (!popup) {
     return;
   }
@@ -67,16 +71,17 @@ function rebuildProfileMenu() {
 }
 
 function applyProfile(profile: LlmProfile | undefined) {
-  const keyInput = el(`zotero-prefpane-${config.addonRef}-llm-api-key`) as HTMLInputElement | null;
-  const urlInput = el(`zotero-prefpane-${config.addonRef}-llm-api-url`) as HTMLInputElement | null;
-  const modelInput = el(`zotero-prefpane-${config.addonRef}-llm-model`) as HTMLInputElement | null;
+  const urlInput = el(
+    `zotero-prefpane-${config.addonRef}-llm-api-url`,
+  ) as HTMLInputElement | null;
+  const modelInput = el(
+    `zotero-prefpane-${config.addonRef}-llm-model`,
+  ) as HTMLInputElement | null;
 
   if (profile) {
-    setPref("llmApiKey", profile.apiKey);
     setPref("llmApiUrl", profile.apiUrl);
     setPref("llmModel", profile.model);
     setPref("llmActiveProfile", profile.name);
-    if (keyInput) keyInput.value = profile.apiKey;
     if (urlInput) urlInput.value = profile.apiUrl;
     if (modelInput) modelInput.value = profile.model;
   } else {
@@ -106,19 +111,20 @@ function onProfileSelect() {
 function onProfileSave() {
   const win = addon.data.prefs!.window;
   const existing = getPref("llmActiveProfile") || "";
-  const name = (win as any).prompt?.("输入配置方案名称：", existing || "") as string | null;
+  const name = (win as any).prompt?.("输入配置方案名称：", existing || "") as
+    | string
+    | null;
   if (!name?.trim()) {
     return;
   }
   const trimmed = name.trim();
 
-  const apiKey = (getPref("llmApiKey") as string) || "";
   const apiUrl = (getPref("llmApiUrl") as string) || "";
   const model = (getPref("llmModel") as string) || "";
 
   const profiles = readProfiles();
   const idx = profiles.findIndex((p) => p.name === trimmed);
-  const entry: LlmProfile = { name: trimmed, apiKey, apiUrl, model };
+  const entry: LlmProfile = { name: trimmed, apiUrl, model };
   if (idx >= 0) {
     profiles[idx] = entry;
   } else {
@@ -167,9 +173,10 @@ function bindPrefEvents() {
     )
     ?.addEventListener("command", (e: Event) => {
       ztoolkit.log(e);
-      addon.data.prefs!.window.alert(
-        `已切换为 ${(e.target as XUL.Checkbox).checked ? "开启" : "关闭"}。`,
-      );
+      const enabled = (e.target as XUL.Checkbox).checked;
+      setPref("enable", enabled);
+      PdfActionFactory.refreshMenuItems();
+      addon.data.prefs!.window.alert(`已切换为 ${enabled ? "开启" : "关闭"}。`);
     });
 
   [
@@ -180,6 +187,8 @@ function bindPrefEvents() {
     "llm-api-key",
     "llm-api-url",
     "llm-model",
+    "translation-chunk-chars",
+    "skip-reference-translation",
     "inline-images",
   ].forEach((suffix) => {
     addon.data
@@ -191,12 +200,18 @@ function bindPrefEvents() {
       });
   });
 
-  el(`zotero-prefpane-${config.addonRef}-llm-profile-select`)
-    ?.addEventListener("command", () => onProfileSelect());
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-select`)?.addEventListener(
+    "command",
+    () => onProfileSelect(),
+  );
 
-  el(`zotero-prefpane-${config.addonRef}-llm-profile-save`)
-    ?.addEventListener("click", () => onProfileSave());
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-save`)?.addEventListener(
+    "click",
+    () => onProfileSave(),
+  );
 
-  el(`zotero-prefpane-${config.addonRef}-llm-profile-delete`)
-    ?.addEventListener("click", () => onProfileDelete());
+  el(`zotero-prefpane-${config.addonRef}-llm-profile-delete`)?.addEventListener(
+    "click",
+    () => onProfileDelete(),
+  );
 }

@@ -13,7 +13,7 @@ function registerPreferencePane() {
     pluginID: addon.data.config.addonID,
     src: `${rootURI}content/preferences.xhtml`,
     label: getString("prefs-title"),
-    image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.png`,
+    image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.svg`,
   });
   prefsRegistered = true;
 }
@@ -57,6 +57,7 @@ async function onMainWindowUnload(win: Window): Promise<void> {
 }
 
 function onShutdown(): void {
+  PdfActionFactory.unregisterMenuItems();
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
   // Remove addon object

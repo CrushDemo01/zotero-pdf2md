@@ -13,9 +13,7 @@ function normalizePath(filePath: string) {
 function toLocalFile(filePath: string) {
   const file = (Components.classes as any)[
     "@mozilla.org/file/local;1"
-  ].createInstance(
-    (Components.interfaces as any).nsIFile,
-  );
+  ].createInstance((Components.interfaces as any).nsIFile);
   file.initWithPath(filePath);
   return file;
 }
@@ -56,8 +54,13 @@ function isAttachmentItem(item: any) {
 
 function safeGetAttachmentPath(item: any): string | undefined {
   try {
-    const path = typeof item?.getFilePath === "function" ? item.getFilePath() : undefined;
-    return typeof path === "string" ? path : typeof path?.toString === "function" ? path.toString() : undefined;
+    const path =
+      typeof item?.getFilePath === "function" ? item.getFilePath() : undefined;
+    return typeof path === "string"
+      ? path
+      : typeof path?.toString === "function"
+        ? path.toString()
+        : undefined;
   } catch (_error) {
     return undefined;
   }
@@ -107,25 +110,29 @@ export async function linkOutputFilesAsAttachments(
 
     const title =
       file.title ||
-      (typeof PathUtils?.filename === "function" ? PathUtils.filename(filePath) : undefined) ||
+      (typeof PathUtils?.filename === "function"
+        ? PathUtils.filename(filePath)
+        : undefined) ||
       filePath;
 
     const attachmentsApi = (Zotero as any).Attachments;
     const preferLink = shouldLinkOutputFile(filePath);
     const createFn = preferLink
-      ? (typeof attachmentsApi?.linkFromFile === "function"
+      ? typeof attachmentsApi?.linkFromFile === "function"
         ? attachmentsApi.linkFromFile.bind(attachmentsApi)
         : typeof attachmentsApi?.importFromFile === "function"
           ? attachmentsApi.importFromFile.bind(attachmentsApi)
-          : undefined)
-      : (typeof attachmentsApi?.importFromFile === "function"
+          : undefined
+      : typeof attachmentsApi?.importFromFile === "function"
         ? attachmentsApi.importFromFile.bind(attachmentsApi)
         : typeof attachmentsApi?.linkFromFile === "function"
           ? attachmentsApi.linkFromFile.bind(attachmentsApi)
-          : undefined);
+          : undefined;
 
     if (!createFn) {
-      throw new Error("Zotero.Attachments.linkFromFile/importFromFile is not available.");
+      throw new Error(
+        "Zotero.Attachments.linkFromFile/importFromFile is not available.",
+      );
     }
 
     try {
